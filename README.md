@@ -1,10 +1,10 @@
 # Credna's Creation Kit 0.24
 
-An original Windows and Linux desktop editor for Fortune's Weave **1.00**. Modules currently available: **Characters**, **Classes**, **Learning tables (LID)**, **GLID progression**, **Skills (SID)**, **Items (IID)**, **Supports & Recruitment**, **Appearance rules**, **Profiles & Affiliations**, **Facilities & Rewards**, **Shop & Loot**, **Battle deployment**, **Legion**, **Progression & Difficulty** the **AID browser**, and **Events**. Paragon was a UI reference only; no Paragon code or game files are included.
+An original Windows and Linux desktop editor for Fortune's Weave **1.00**. Modules currently available: **Characters**, **Classes**, **Learning tables (LID)**, **GLID progression**, **Skills (SID)**, **Items (IID)**, **Supports & Recruitment**, **Appearance rules**, **Profiles & Affiliations**, **Facilities & Rewards**, **Shop & Loot**, **Battle deployment**, **Legion**, **Progression & Difficulty** the **AID browser**, and **Events Editor**
 
-**New in 0.24:** the program is now officially **Credna's Creation Kit** (formerly **FW Hacking Suite**). Window titles, launchers, executable and release names use the new name. Existing projects, preferences and the translation glossary remain compatible. See [GITHUB-UPLOAD.md](GITHUB-UPLOAD.md) to publish the source and downloadable packages on GitHub.
 
-**Added in 0.23:** **Tools → Script editor…** edits compiled ASF scripts: runtime string constants, numeric literals, paired condition inversion and existing calls with identical signatures. It rebuilds string caches, preserves instruction count/branch destinations, validates the result and exports compressed files under `romfs/Script`. It is a limited instruction editor, not a source decompiler/compiler. See [SCRIPT-EDITOR.md](SCRIPT-EDITOR.md) for supported changes and usage. All sixteen modules and earlier creation features remain included; the **Events** module and [Majide cape investigation](EVENT-RESEARCH.md) remain available.
+
+**Added in 0.24:** **Tools → Script editor…** edits compiled ASF scripts: runtime string constants, numeric literals, paired condition inversion and existing calls with identical signatures. It rebuilds string caches, preserves instruction count/branch destinations, validates the result and exports compressed files under `romfs/Script`. It is a limited instruction editor, not a source decompiler/compiler. See [SCRIPT-EDITOR.md](SCRIPT-EDITOR.md) for supported changes and usage. All sixteen modules and earlier creation features remain included; the **Events** module and [Majide cape investigation](EVENT-RESEARCH.md) remain available.
 
 ## Install or upgrade
 
@@ -64,71 +64,27 @@ Preferences store paths and the last project's module, without game data or unsa
 7. **Export mod…** writes every loaded supported table into a separate mod folder. All loaded editable modules' edits are included, regardless of which module is visible. Use an empty folder initially. Existing editor exports receive dated binary backups.
 8. Put the entire output mod folder inside Eden's **Open Mod Data Location** directory, enable the mod, and restart the game to test. Existing saves may retain already-created unit values.
 
-Example output when all **191 supported files** are loaded (20 root files and 171 Dispos files):
-
-```text
-MyMod/
-  suite-edits.json
-  romfs/
-    GameData/
-      Person.bin
-      Job.bin
-      Growth.bin
-      Growth_P0.bin
-      Variable.bin
-      Variable_P0.bin
-      Variable_P1.bin
-      Timeline_Com.bin
-      Timeline_Part0_Ism.bin
-      Timeline_Part1_Dit.bin
-      Timeline_Part1_Kai.bin
-      Timeline_Part1_Led.bin
-      Timeline_Part1_Seo.bin
-      Timeline_Part2.bin
-      Timeline_Part3_Ism.bin
-      Chapter.bin
-      Situation.bin
-      Legion.bin
-      Skill.bin
-      Skill_P0.bin
-      Skill_P1.bin
-      Item.bin
-      Item_P0.bin
-      Item_P1.bin
-      Reliance.bin
-      Profile.bin
-      Facility.bin
-      Reward.bin
-      Reward_P0.bin
-      Reward_P1.bin
-      AssetTable.bin
-      AssetTable_P0.bin
-      AssetTable_P1.bin
-      Dispos/
-        ... 171 battle files ...
-```
-
 Original game files are never overwritten. An existing unrelated binary is refused as an export target, including any Skill, Item, Reliance, Profile, Facility, Reward or AssetTable file. A prior character-only export can be upgraded to a suite export. If an output already contains tables not loaded in the current session, open the full source folder or choose a fresh output folder.
 
-## Learning-table editor (LID) — new in 0.5
+## Learning-table editor (LID)
 
 Choose **Module → Learning tables** with the original **Growth.bin** present in GameData. A standalone folder containing Growth.bin also works. The supplied file contains **96 LID collections and 4,034 learning entries**. The GLID progression editor below shares the same Growth.bin document.
 
 The sidebar searches English/glossary names and raw LIDs and displays each table's entry count. The Entries tab lists each row's level, skill-type code, skill-level code, English skill name, raw SID and condition count. Select a row to edit:
 
-| Field | Contents |
-|---|---|
-| Level | Original unsigned 8-bit value (`0–255`) |
-| Skill type code | Original unsigned 8-bit category code; enum names are not inferred |
-| Skill level code | Original unsigned 8-bit rank/threshold code; rank letters and zero-value behavior are not inferred |
-| Skill reference | A raw SID with live English/glossary preview; **…** searches the loaded skill catalog |
-| Required conditions | One raw condition ID per line, with matching English previews; **+** selects observed conditions |
+| Field               | Contents                                                                                           |
+| ------------------- | -------------------------------------------------------------------------------------------------- |
+| Level               | Original unsigned 8-bit value (`0–255`)                                                            |
+| Skill type code     | Original unsigned 8-bit category code; enum names are not inferred                                 |
+| Skill level code    | Original unsigned 8-bit rank/threshold code; rank letters and zero-value behavior are not inferred |
+| Skill reference     | A raw SID with live English/glossary preview; **…** searches the loaded skill catalog              |
+| Required conditions | One raw condition ID per line, with matching English previews; **+** selects observed conditions   |
 
 **Apply edits** commits the selected row. Selecting another row/table/module also commits valid form changes; invalid values block navigation. **Copy entry** and **Paste values** transfer all five fields into an existing or added row, including across LID tables. **Swap ↑/↓** exchange adjacent row values while retaining the row headers. **Reset table** restores the selected LID's original values and removes its additions without resetting other LIDs, GLID, auxiliary Growth sections or modules.
 
 **Used by** shows current direct Person.bin learning-list references, including unsaved character edits. Double-click or use **Open selected entry** to open that character. This is not a scan of scripts or GLID-derived behavior. The supplied primary Job.bin schema has no learning-list field to include here.
 
-### Adding learning entries — experimental in 0.17
+### Adding learning entries
 
 - **Add entry** appends a blank row to the selected existing LID. Defaults are level 1, type/rank code 0, an empty SID and no conditions. Choose the desired skill and requirements before exporting. Empty existing lists can receive their first row.
 - **Duplicate entry** appends a copy of the selected row's five current values, including valid pending form edits. Changes to the copy's conditions do not change the source row.
@@ -139,7 +95,7 @@ The exporter inserts new row blocks, updates collection counts and rebuilds poin
 
 Projects containing additions use **`fw-growth-edits-v3`** and require **0.17 or newer**. They store the new rows alongside original LID, GLID and auxiliary Growth edits, tied to the unchanged original Growth.bin fingerprint. **Open last project** restores the additions. Projects without additions retain the existing v1/v2 formats. Loading an older project replaces additions as well as edits, with the normal replacement prompt. An addition with untouched default values still counts as a workspace edit.
 
-### Creating complete learning lists — experimental in 0.18
+### Creating complete learning lists
 
 1. Choose **New list…** above the entry grid and enter an unused ID beginning with **`LID_`**, for example `LID_MyCustomList`. The new list starts empty. Add its first row with **Add entry**.
 2. Alternatively select a source list, then choose **Duplicate list…** and give the copy a new ID. This copies **all five current values of every row**, including pending valid edits and added rows, into an independent list. Changing the copy does not change its source. This also works for empty lists or another new list.
@@ -159,7 +115,7 @@ Character, class, learning and GLID edits save together in the suite project, an
 
 Changes to a shared LID affect every character that references it. Reference strings can be typed manually; structural validation does not prove a new SID/condition exists or that its gameplay behavior is valid. Edited learning tables still need an in-game test.
 
-## GLID automatic-progression editor — new in 0.6
+## GLID automatic-progression editor
 
 Choose **Module → GLID progression** with the original **Growth.bin** loaded. The supplied 1.00 file contains **206 GLID collections, 1,630 category rows and 81 fields per row**: a category byte plus 80 string cells for levels **1–79 and 80+**. A folder containing only Growth.bin works too.
 
@@ -169,12 +125,12 @@ Search the sidebar by English/glossary name or raw GLID. Select a table, then ch
 
 The schema names the category byte but does not document its enum. The supplied data supports the following observations; these are not claims about the complete runtime behavior:
 
-| Category | Observed values / chooser |
-|---|---|
-| 0 | Class names; chooser draws from existing JIDs and writes their **bare names** |
-| 2 | Mount-related numeric strings in mount-named tables; preserved as raw text |
-| 4–8 | Item names; chooser draws from existing IIDs and writes their **bare names** |
-| 1, 3, 9 and other codes | Meanings unverified; observed raw values remain available |
+| Category                | Observed values / chooser                                                     |
+| ----------------------- | ----------------------------------------------------------------------------- |
+| 0                       | Class names; chooser draws from existing JIDs and writes their **bare names** |
+| 2                       | Mount-related numeric strings in mount-named tables; preserved as raw text    |
+| 4–8                     | Item names; chooser draws from existing IIDs and writes their **bare names**  |
+| 1, 3, 9 and other codes | Meanings unverified; observed raw values remain available                     |
 
 For example, the stored class cell is `闘士`, **not** `JID_闘士`. The chooser searches English names and Japanese raw values and returns the bare value. English previews use the category's class/item namespace when an exact catalog match exists. Unmatched values use the offline glossary. Manual text is preserved exactly; entering an arbitrary new name does not create a class or item.
 
@@ -197,7 +153,7 @@ Older character/class projects and **0.5/0.5.1 learning projects** remain loadab
 
 Validation covers all **152,200 LID+GLID field values** after joint edits, unchanged identifiers/counts/native headers, unrelated bytes and pointer targets, string sharing, Unicode, the 80+ column, empty cells, old projects and rollback on invalid projects. The actual GUI regression also exercises English choosers, row copy/paste, combined export and reopening. Exports still need an **in-game test**; structural preservation cannot prove the meaning or gameplay validity of every edited value.
 
-## SID skill editor and usage browser — new in 0.7
+## SID skill editor and usage browser
 
 Choose **Module → Skills**. The **Source** selector switches between the loaded **Skill.bin**, **Skill_P0.bin** and **Skill_P1.bin**. Their records remain separate, including duplicate SIDs; no runtime overlay order is assumed. The heading identifies the selected file and notes when a SID is also defined in another loaded file.
 
@@ -205,16 +161,16 @@ The supplied 1.00 files contain **2,854 + 28 + 3 = 2,885 records**, representing
 
 Search by English/glossary name or raw SID within the selected source. **Copy SID** copies the exact selected identifier, including brackets, fullwidth plus signs and reserved-name characters.
 
-| Tab | Contents |
-|---|---|
-| Overview | Name/description/message keys, text arguments, variables, command/warning/notification references and selection/learning/equip/timing codes |
-| Effects | Effect code and numeric value list, costs, range, count, experience, period list, duration/change values and attack/action parameters |
-| Conditions | Two distinct required/blocking skill-group pairs, enhancement-invalidation reference, flags, targets/comparisons and continuation/placement conditions |
-| Stats | Signed 16-bit combat block and float combat block; four raw stat blocks with their original offsets and data types |
-| Links | Co-learned/granted-effect/resistance/burst/upgrade skills, equipment, transformation, range, placement, summon and material references |
-| Presentation | Effects, motion, voice, sound, icons and used/consumed flags |
-| Used by | Current structured field references, with source, owner name, field/offset and list/group location; navigate to editable owners |
-| File references | Original string-pool occurrences plus indexing coverage/errors; this includes definitions and is not a confirmed-usage list |
+| Tab             | Contents                                                                                                                                               |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Overview        | Name/description/message keys, text arguments, variables, command/warning/notification references and selection/learning/equip/timing codes            |
+| Effects         | Effect code and numeric value list, costs, range, count, experience, period list, duration/change values and attack/action parameters                  |
+| Conditions      | Two distinct required/blocking skill-group pairs, enhancement-invalidation reference, flags, targets/comparisons and continuation/placement conditions |
+| Stats           | Signed 16-bit combat block and float combat block; four raw stat blocks with their original offsets and data types                                     |
+| Links           | Co-learned/granted-effect/resistance/burst/upgrade skills, equipment, transformation, range, placement, summon and material references                 |
+| Presentation    | Effects, motion, voice, sound, icons and used/consumed flags                                                                                           |
+| Used by         | Current structured field references, with source, owner name, field/offset and list/group location; navigate to editable owners                        |
+| File references | Original string-pool occurrences plus indexing coverage/errors; this includes definitions and is not a confirmed-usage list                            |
 
 ### Field editing
 
@@ -246,7 +202,7 @@ Older character, class, LID and GLID projects remain loadable; replacing the wor
 
 Validation includes all **452,945 skill-field values** after mixed edits across the three files, opaque bytes and pointer targets, shared arrays, empty/nested groups, finite float bounds and decimal roundtrips, reopening/re-exporting, file-specific project rollback and joint exports. The actual Tk check exercises all field widgets, English choices/previews, invalid-input blocking, side-file separation, current-owner and LID navigation, reset, clipboard and reopening. Edited skills still need an **in-game test**.
 
-## IID/item editor — new in 0.8
+## IID/item editor
 
 Choose **Module → Items**. The **Source** selector switches between **Item.bin**, **Item_P0.bin** and **Item_P1.bin**, with **1,356 + 16 + 16 = 1,388 distinct item records** in the supplied 1.00 files. All **80 primary fields per record** are editable. Original IIDs and their record indexes remain fixed. New items can be created or duplicated in 0.19; original items cannot be deleted or renamed. A standalone folder/file containing only one of these item tables works too.
 
@@ -254,17 +210,17 @@ Search by English/glossary name or raw IID within the selected source. Load **US
 
 Some prototype IDs in Item_P1.bin end with **literal pipe characters**: `IID_試作品１号`, `IID_試作品１号|`, `IID_試作品１号||` and `IID_試作品１号|||` identify different slots. Search, copy, project/export and reference matching preserve those characters. The editor does not split them as logical operators or merge a longer ID with its prefix.
 
-| Tab | Contents |
-|---|---|
-| Overview | Name/description keys, text arguments, type/use/target codes, buy/sell prices, value/experience/category/rarity codes |
-| Stats & use | Durability, power, weight, contamination/support, ranges, material/taste/grade and recovery values; eight raw weapon values, combat modifiers and eleven signed stat modifiers |
-| Skills | Separate equipped, held, use, granted, removed, required and forbidden SID references |
-| Crafting | Repair material/count/cost, forge target/material/count/cost, condition, flags, conversion target/count, lottery group and classification links |
-| Presentation | Activation/launch/impact/hit effects, asset flag and icon identifier |
-| Used by | Current references from loaded editable tables, observed GLID item-name cells and read-only shop/lottery entries |
-| File references | Original IID string-pool occurrences and source/collection coverage, separate from current unsaved references |
+| Tab             | Contents                                                                                                                                                                       |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Overview        | Name/description keys, text arguments, type/use/target codes, buy/sell prices, value/experience/category/rarity codes                                                          |
+| Stats & use     | Durability, power, weight, contamination/support, ranges, material/taste/grade and recovery values; eight raw weapon values, combat modifiers and eleven signed stat modifiers |
+| Skills          | Separate equipped, held, use, granted, removed, required and forbidden SID references                                                                                          |
+| Crafting        | Repair material/count/cost, forge target/material/count/cost, condition, flags, conversion target/count, lottery group and classification links                                |
+| Presentation    | Activation/launch/impact/hit effects, asset flag and icon identifier                                                                                                           |
+| Used by         | Current references from loaded editable tables, observed GLID item-name cells and read-only shop/lottery entries                                                               |
+| File references | Original IID string-pool occurrences and source/collection coverage, separate from current unsaved references                                                                  |
 
-### Creating items — experimental in 0.19
+### Creating items
 
 1. Select **Module → Items**, choose the destination **Source**, and open **Overview**. **New item…** appends a blank item; **Duplicate item…** appends an independent copy of all **80 current field values**, including valid pending edits. Items are created in the selected file, not automatically merged across files.
 2. Give the new definition an unused **`IID_`** ID. Unicode and literal pipe suffixes are supported. Empty names, whitespace, nulls, quotes, `, ; ! &` and the reserved `::` separator are rejected. Creation and project/export validation reject new IDs that collide with another loaded item file. Unloaded files/mods cannot be checked.
@@ -306,19 +262,19 @@ Character, class, LID/GLID, skill and item edits save in one suite project, with
 
 Validation covers all **111,040 item-field values** after mixed edits across three files, original IDs/counts/header metadata, untouched pointer targets and auxiliary bytes, signed/unsigned bounds, shared-array isolation, Unicode/pipe IDs, reopen/re-edit/export, project rollback and nine-file export/backups. The actual GUI test exercises all 80 widgets, English choosers/previews, side-file isolation, live item/SID/character/GLID navigation, reset, clipboard and reopening. Edited mods still require an **in-game test**; structural checks do not establish gameplay validity.
 
-## Supports & Recruitment — new in 0.9
+## Supports & Recruitment
 
 Open the original **Reliance.bin** with GameData, then choose **Module → Supports & Recruitment**. The **Section** selector exposes all seven supported Reliance sections. This is one shared editable document: changing sections never creates competing Reliance.bin exports.
 
-| Section | Supplied rows | Editable contents |
-|---|---:|---|
-| Compatibility | 73 rows × 73 columns | Directed compatibility-code matrix, indexed by the original RID order |
-| Pair bonuses | 314 | Character-pair references, nine signed combat modifiers and initial-level code |
-| Support conditions | 515 | Partner references, rank/route/part/chapter codes, joined-character references, flags, support addition, dates/default codes and linked flag |
-| Recruitment | 214 | Route, support/renown requirements, attribute bitmask, required/completion flags, type/difficulty codes, item/count, arguments and hint fields |
-| Assist rates | 8 | Fixed-length stored rate vectors for successive occurrences |
-| Linked voices | 165 | Speaker/target references, voice labels, alternate label and switch flags |
-| Tobias items | 3 | Favorite, normal and disliked recruitment-item lists |
+| Section            | Supplied rows        | Editable contents                                                                                                                              |
+| ------------------ | --------------------:| ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Compatibility      | 73 rows × 73 columns | Directed compatibility-code matrix, indexed by the original RID order                                                                          |
+| Pair bonuses       | 314                  | Character-pair references, nine signed combat modifiers and initial-level code                                                                 |
+| Support conditions | 515                  | Partner references, rank/route/part/chapter codes, joined-character references, flags, support addition, dates/default codes and linked flag   |
+| Recruitment        | 214                  | Route, support/renown requirements, attribute bitmask, required/completion flags, type/difficulty codes, item/count, arguments and hint fields |
+| Assist rates       | 8                    | Fixed-length stored rate vectors for successive occurrences                                                                                    |
+| Linked voices      | 165                  | Speaker/target references, voice labels, alternate label and switch flags                                                                      |
+| Tobias items       | 3                    | Favorite, normal and disliked recruitment-item lists                                                                                           |
 
 There are **1,292 fixed records and 20,033 stored fields** across these sections. Native names, IDs, row order and record counts stay fixed. Some names are empty and some support-conversation names are duplicated; every original row remains available by its own row number. This release does not add/delete rows or create new support events or recruitment entries.
 
@@ -362,17 +318,17 @@ SID/IID usage browsers now scan all seven live sections. For example, a required
 
 Validation compares all **20,033 field values**, including all **5,329 matrix cells**, after mixed edits across every section. It checks directional isolation, original native headers/names/counts/labels, untouched bytes/pointer targets, shared-list isolation, fixed vector lengths, numeric bounds, project rollback and repeated export. The actual Tk check covers all seven sections, input blocking, English choosers/previews, linked owners, exact item-to-scout navigation, reset, combined export, standalone loading and saved-section reopening. Edited exports still need an **in-game test**.
 
-## Appearance-rule editor — new in 0.10
+## Appearance-rule editor
 
 Choose **Module → Appearance rules**. **Source** keeps `AssetTable.bin`, `AssetTable_P0.bin` and `AssetTable_P1.bin` separate; no runtime override order is assumed. **Section** selects the sections actually present in that file. The supplied 1.00 data contains **7,328 rows / 315,123 editable field values** across the three files.
 
-| Section | Main-file rows | Contents |
-|---|---:|---|
-| Appearance rules | 6,184 | 49 fields: grouped conditions, body/head/hair/mount models, equipment, animations, accessories, effects, materials, scale, raw colors, voice/portrait link and keywords |
-| Asset information | 307 | Model/effect/bone references and effect size; multiline assignments remain single strings |
-| Variations | 20 | Ten reference lists per row |
-| Voice / portrait | 612 | Voice and portrait IDs, positioning floats and presentation flags |
-| Condition sets | 182 | Grouped conditions and additional flags |
+| Section           | Main-file rows | Contents                                                                                                                                                                |
+| ----------------- | --------------:| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Appearance rules  | 6,184          | 49 fields: grouped conditions, body/head/hair/mount models, equipment, animations, accessories, effects, materials, scale, raw colors, voice/portrait link and keywords |
+| Asset information | 307            | Model/effect/bone references and effect size; multiline assignments remain single strings                                                                               |
+| Variations        | 20             | Ten reference lists per row                                                                                                                                             |
+| Voice / portrait  | 612            | Voice and portrait IDs, positioning floats and presentation flags                                                                                                       |
+| Condition sets    | 182            | Grouped conditions and additional flags                                                                                                                                 |
 
 The supplied side files contain **13 and 10 appearance rules**, respectively. They have no other sections. Native row order, labels (including blanks and duplicates), IDs and counts stay fixed. This editor does not create/delete/reorder rows or rename native IDs.
 
@@ -396,17 +352,17 @@ The **AIDs** browser now reads current appearance values, including unsaved edit
 
 Validation checks every stored appearance value after mixed edits, exact color/float bytes, original labels/native headers/counts, untouched bytes/pointer targets, Unicode, shared-list isolation, scalar multiline preservation, project rollback and exports. The actual GUI check covers all five sections, settings copy, linked navigation, live browser updates, source switching, invalid input, combined-file export and remembered reopening. Edited mods still require an **in-game test**; structural checks do not establish runtime rule semantics.
 
-## Profiles & Affiliations — new in 0.11
+## Profiles & Affiliations
 
 Choose **Module → Profiles & Affiliations** with the original **Profile.bin** loaded. This module exposes all **five sections**, sharing one project entry and one exported file. The supplied 1.00 data contains **915 native rows / 18,445 stored field values**.
 
-| Section | Rows | Fields per row | Contents |
-|---|---:|---:|---|
-| Profiles | 313 | 46 | Activation/group references, date/height, biography and introduction keys, history, preferences, gifts, social/activity ratings and senior targets |
-| Affiliations | 97 | 5 | Clan-name message key, route code, icon, grouped transition conditions and next affiliation |
-| Conversation expressions | 325 | 6 | 3D/2D expression, motion, mouth-state/shape codes and sweat bitmask |
-| Conversation restrictions | 1 | 1 | Condition list for an existing native conversation key |
-| Roster order | 179 | 9 | Signed 16-bit display-order values for each language |
+| Section                   | Rows | Fields per row | Contents                                                                                                                                           |
+| ------------------------- | ----:| --------------:| -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Profiles                  | 313  | 46             | Activation/group references, date/height, biography and introduction keys, history, preferences, gifts, social/activity ratings and senior targets |
+| Affiliations              | 97   | 5              | Clan-name message key, route code, icon, grouped transition conditions and next affiliation                                                        |
+| Conversation expressions  | 325  | 6              | 3D/2D expression, motion, mouth-state/shape codes and sweat bitmask                                                                                |
+| Conversation restrictions | 1    | 1              | Condition list for an existing native conversation key                                                                                             |
+| Roster order              | 179  | 9              | Signed 16-bit display-order values for each language                                                                                               |
 
 Use **Section** to switch layouts and search by English/glossary name, native ID or textual reference. Native PRFs, BIDs, conversation/expression names, roster keys, row counts and order stay fixed. This release edits existing records; it does not create/delete/rename them or change character slots.
 
@@ -438,7 +394,7 @@ Old projects remain supported and clear Profile edits when replacing the workspa
 
 Tests compare all **18,445 stored values** after mixed edits across every section, preserving native labels/headers/counts, unrelated bytes/pointer targets and shared arrays. They cover paired-history validation, numeric bounds, old projects, transactional rollback, export guards and live references. The GUI regression covers English biography/clan previews and choosers, all five sections, invalid-input blocking, direct-link navigation, gift-to-profile navigation, combined export/reset, source preservation, standalone loading and saved-section reopening. Edited mods still need an **in-game test**.
 
-## Facilities & Rewards — new in 0.12
+## Facilities & Rewards
 
 Choose **Module → Facilities & Rewards**. **Source** selects `Facility.bin`, `Reward.bin`, `Reward_P0.bin` or `Reward_P1.bin`; main and side records remain separate, including repeated names. **Section** selects the sections actually present in the chosen file. Together the supplied 1.00 files contain **1,053 editable rows / 8,512 stored field values**.
 
@@ -446,28 +402,28 @@ Choose **Module → Facilities & Rewards**. **Source** selects `Facility.bin`, `
 
 Facility.bin contains **493 rows / 3,832 fields** across all twenty sections:
 
-| Section | Rows | Editable contents |
-|---|---:|---|
-| Cooking | 12 | Name/help keys, schedule bitmask, renown requirement, price, material/taste codes and model reference |
-| Training | 10 | Conditions, schedule/cost, raw aptitude values, two weapon references and their class lists |
-| Theater rewards | 8 | Money, renown, support value, item-lottery reference and raw float chance |
-| Baths | 16 | Name/help, renown/flags/cost, normal/special bitmasks, learned skills, weights and map |
-| Temples | 12 | Icon conditions, service/blessing/character links, paired location/spot/argument fields and battle/reward references |
-| EX spots | 6 | Spot, bare skill name, warp destination and past-memory vector |
-| Spectating | 12 | Name/detail/event references, route/activation conditions, date and raw reception times |
-| Inns | 5 | Feature bitmask |
-| Individual actions | 4 | Experience/money/material values and raw display codes |
-| Perch answers | 23 | Answer-group code |
-| Perch questions | 68 | Character, conditions and ten bare answer references |
-| Divination | 64 | Conversation reference and stored value |
-| Lessons | 9 | Name/content, type, teacher, renown, conversation/battlefield/subquest and item/class rewards |
-| Challenges | 9 | Subquest, battlefield and conversation number |
-| Opening hours | 21 | Facility definition, conditions and four time-band codes, in **20 native groups** |
-| Facility statuses | 51 | Status names, in **8 native groups** |
-| Reward multipliers | 3 | Five condition/renown/multiplier blocks per row |
-| Facility banter | 158 | Facility code, character/conversation pairs, flags and raw support codes |
-| Facility event triggers | 1 | Label/facility, part/chapter A/B, route and flags |
-| Facility guidance | 1 | Existing conversation label |
+| Section                 | Rows | Editable contents                                                                                                    |
+| ----------------------- | ----:| -------------------------------------------------------------------------------------------------------------------- |
+| Cooking                 | 12   | Name/help keys, schedule bitmask, renown requirement, price, material/taste codes and model reference                |
+| Training                | 10   | Conditions, schedule/cost, raw aptitude values, two weapon references and their class lists                          |
+| Theater rewards         | 8    | Money, renown, support value, item-lottery reference and raw float chance                                            |
+| Baths                   | 16   | Name/help, renown/flags/cost, normal/special bitmasks, learned skills, weights and map                               |
+| Temples                 | 12   | Icon conditions, service/blessing/character links, paired location/spot/argument fields and battle/reward references |
+| EX spots                | 6    | Spot, bare skill name, warp destination and past-memory vector                                                       |
+| Spectating              | 12   | Name/detail/event references, route/activation conditions, date and raw reception times                              |
+| Inns                    | 5    | Feature bitmask                                                                                                      |
+| Individual actions      | 4    | Experience/money/material values and raw display codes                                                               |
+| Perch answers           | 23   | Answer-group code                                                                                                    |
+| Perch questions         | 68   | Character, conditions and ten bare answer references                                                                 |
+| Divination              | 64   | Conversation reference and stored value                                                                              |
+| Lessons                 | 9    | Name/content, type, teacher, renown, conversation/battlefield/subquest and item/class rewards                        |
+| Challenges              | 9    | Subquest, battlefield and conversation number                                                                        |
+| Opening hours           | 21   | Facility definition, conditions and four time-band codes, in **20 native groups**                                    |
+| Facility statuses       | 51   | Status names, in **8 native groups**                                                                                 |
+| Reward multipliers      | 3    | Five condition/renown/multiplier blocks per row                                                                      |
+| Facility banter         | 158  | Facility code, character/conversation pairs, flags and raw support codes                                             |
+| Facility event triggers | 1    | Label/facility, part/chapter A/B, route and flags                                                                    |
+| Facility guidance       | 1    | Existing conversation label                                                                                          |
 
 **Opening hours** and **Facility statuses** are collections with separate group headers and leaf records. The **Group** dropdown uses English captions for the known facility groups and filters their native rows; it does not move or combine rows. Empty groups, original counts and native leaf ordinals are preserved. The heading identifies the source, section, row and group. Repeated fields in training, temples, multipliers and event triggers receive A/B or numbered labels without inferring priority or range semantics.
 
@@ -479,12 +435,12 @@ EX-spot skill references store a **bare name**, not `SID_...`; perch answer refe
 
 Reward.bin contains **553 rows / 4,589 fields**, across four sections:
 
-| Section | Rows | Editable contents |
-|---|---:|---|
-| Achievements | 418 | Entry key, type/counter/aggregation codes, signed 32-bit required value, causality points and completion/display conditions |
-| Causality rewards | 81 | Entry/reward/help keys, effect/operation/value/clear-count codes and point cost |
-| Notifications & rewards | 33 | Condition bitmask, flags, type/message/arguments/icon/tutorial/sound, target and skill-code/experience vectors, item rewards and flag |
-| Renown | 21 | Level, required part/experience, completion conditions/flags, icons/messages and item rewards |
+| Section                 | Rows | Editable contents                                                                                                                     |
+| ----------------------- | ----:| ------------------------------------------------------------------------------------------------------------------------------------- |
+| Achievements            | 418  | Entry key, type/counter/aggregation codes, signed 32-bit required value, causality points and completion/display conditions           |
+| Causality rewards       | 81   | Entry/reward/help keys, effect/operation/value/clear-count codes and point cost                                                       |
+| Notifications & rewards | 33   | Condition bitmask, flags, type/message/arguments/icon/tutorial/sound, target and skill-code/experience vectors, item rewards and flag |
+| Renown                  | 21   | Level, required part/experience, completion conditions/flags, icons/messages and item rewards                                         |
 
 Reward_P0.bin adds **3 notification rows**, and Reward_P1.bin adds **4**. These 91 side-file field values stay in their own source files. Names may be blank or repeated; stable row indexes distinguish them. No runtime override order is assumed. Skill-code vectors in notifications remain numeric bytes; they are not interpreted as SID strings.
 
@@ -504,15 +460,15 @@ All sections in each binary share one **`fw-facility-edits-v1`** project entry w
 
 Tests compare **all 8,512 field values** after mixed edits across all four files, including native collection headers/counts, opaque bytes, pointer targets, shared-list isolation, exact numeric/float bytes, empty groups, paired weights, transactional projects and export guards. The actual GUI check exercises all sections/sources, grouped filters, English previews/choosers, raw bounds, source restoration, SID/IID/profile/class links, eighteen-file export, reset/reload and standalone side-file opening. No edited mod has been tested in-game.
 
-## Shop & Loot — new in 0.13
+## Shop & Loot
 
 Choose **Module → Shop & Loot**. This module edits the existing auxiliary data inside **Item.bin**, rather than creating another binary or a second Item.bin document. **Source** lists loaded item files containing supported auxiliary tables; in the supplied 1.00 data only Item.bin has them. Item_P0.bin and Item_P1.bin retain their primary item editors and are not assigned invented shop/loot sections.
 
-| Section | Collections | Entries | Fields per entry |
-|---|---:|---:|---:|
-| Shops | 114 | 1,152 | 9 |
-| Loot lotteries | 136 | 785 | 3 |
-| Value tiers | One display group | 11 native rows | 2 |
+| Section        | Collections       | Entries        | Fields per entry |
+| -------------- | -----------------:| --------------:| ----------------:|
+| Shops          | 114               | 1,152          | 9                |
+| Loot lotteries | 136               | 785            | 3                |
+| Value tiers    | One display group | 11 native rows | 2                |
 
 The new views expose **12,745 auxiliary field values**. Together with all three primary Item tables, the item regressions cover **123,785 values**. The full suite still exports **18 files**, because the existing Item.bin now includes both sets of edits.
 
@@ -558,21 +514,7 @@ Primary-only item projects continue to use **`fw-item-edits-v1`**. When an auxil
 
 Validation compares all **123,785 primary plus auxiliary values** after joint edits across the three item files, including original label/header metadata, the 250 native collection headers, unchanged pointer targets/opaque bytes, numeric limits, shared arrays, empty groups, exchange pairs, pipe IDs, v1/v2 migration, rollback and a single Item.bin export. The actual GUI check covers all three sections, English item choosers, copied/reset values, invalid input, exact usage navigation, side-item opening, facility links, combined export, remembered section and an empty existing collection. Edited mods still need an **in-game test**.
 
-## Planned module order
-
-The user requested one module at a time, starting the next only after **continue**:
-
-1. Supports & Recruitment — included in 0.9.
-2. Appearance-rule editing — included in 0.10.
-3. Profiles and affiliations — included in 0.11.
-4. Facilities and rewards — included in 0.12.
-5. Shop and loot — included in 0.13.
-6. Battle deployment — included in 0.14.
-7. Legion — included in 0.15.
-8. Expanded progression and difficulty — included in 0.16.
-9. Terrain — next, awaiting continue.
-
-## Battle deployment — new in 0.14
+## Battle deployment
 
 Choose **Battle deployment**, select a **Deployment file**, then choose a native
 **group** in the left list. The unit list above the form shows character names,
@@ -645,7 +587,7 @@ copy/reset, invalid-input blocking, exact-reference navigation, project reopenin
 empty groups and read-only battlefield links. No edited deployment has been
 tested in-game.
 
-## Legion — new in 0.15
+## Legion/Battalions
 
 Choose **Legion** to browse the **109 definitions** in `Legion.bin`. The supplied
 1.00 file has **28 fields per row / 3,052 values**. Names and descriptions use
@@ -708,7 +650,7 @@ GUI check exercises every field, English choices, copy/reset, bounds, exact
 bidirectional links, project reopen, standalone loading and combined export.
 Edited legion data has not been tested in-game.
 
-## Expanded progression and difficulty — new in 0.16
+## Expanded progression and difficulty
 
 Choose **Progression & Difficulty**, then a **Source** and **Section**. These are
 additional views of the existing Person/Growth owners, plus the newly supported
@@ -718,21 +660,21 @@ GLID progression; the same physical file is never exported twice.
 The supplied 1.00 data exposes **13 source/section combinations**, **510 rows**
 and **2,397 additional field values**:
 
-| Source | Section | Native tables/records | Rows | Fields per row |
-|---|---|---:|---:|---:|
-| Growth.bin | Experience curves | 4 | 121 | 2 |
-| Growth.bin | Experience modifiers | 9 | 145 | 4 |
-| Growth.bin | Experience calculation links | 13 | 13 | 1 |
-| Growth.bin | Automatic aptitude experience | 1 | 65 | 2 |
-| Growth.bin | Automatic class decisions | 35 | 35 | 15 |
-| Growth.bin | Automatic item grants | 7 | 7 | 6 |
-| Growth.bin | Protagonist item grants | 8 | 8 | 3 |
-| Growth.bin | Automatic legion grants | 1 | 1 | 6 |
-| Growth.bin | Part 2 item supplies | 11 | 11 | 4 |
-| Growth.bin | Part 2 legion supplies | 13 | 13 | 2 |
-| Person.bin | Difficulty loadouts | 83 | 83 | 9 |
-| Person.bin | Automatic personal equipment | 7 | 7 | 2 |
-| Growth_P0.bin | Part 2 item supplies | 1 | 1 | 4 |
+| Source        | Section                       | Native tables/records | Rows | Fields per row |
+| ------------- | ----------------------------- | ---------------------:| ----:| --------------:|
+| Growth.bin    | Experience curves             | 4                     | 121  | 2              |
+| Growth.bin    | Experience modifiers          | 9                     | 145  | 4              |
+| Growth.bin    | Experience calculation links  | 13                    | 13   | 1              |
+| Growth.bin    | Automatic aptitude experience | 1                     | 65   | 2              |
+| Growth.bin    | Automatic class decisions     | 35                    | 35   | 15             |
+| Growth.bin    | Automatic item grants         | 7                     | 7    | 6              |
+| Growth.bin    | Protagonist item grants       | 8                     | 8    | 3              |
+| Growth.bin    | Automatic legion grants       | 1                     | 1    | 6              |
+| Growth.bin    | Part 2 item supplies          | 11                    | 11   | 4              |
+| Growth.bin    | Part 2 legion supplies        | 13                    | 13   | 2              |
+| Person.bin    | Difficulty loadouts           | 83                    | 83   | 9              |
+| Person.bin    | Automatic personal equipment  | 7                     | 7    | 2              |
+| Growth_P0.bin | Part 2 item supplies          | 1                     | 1    | 4              |
 
 **Experience curves** contain stored level/required-experience pairs for unit,
 aptitude, mount and support levels. **Modifiers** contain a signed lookup value
@@ -801,11 +743,11 @@ protection, preflight builds, output ownership checks and dated backups remain.
 files and existing empty grouped tables are supported. Edited progression and
 difficulty mods still require an in-game test.
 
-## AID browser — new in 0.4
+## AID browser
 
 Choose **Module → AIDs**. This remains a reference browser; **Edit selected row** opens the new Appearance rules editor. The supplied files currently reveal **1,093 distinct AIDs** across **305 readable GameData files**, including AssetTable.bin, AssetTable_P0.bin and AssetTable_P1.bin. Counts depend on which files are available in the selected folder. One supplied file, Gmap/Data.bin, is not in the supported table format and is listed as skipped.
 
-### Source-file sorting (0.5.1)
+### Source-file sorting
 
 The AID sidebar groups entries under their discovery filenames by default. Files are sorted alphabetically, and AIDs inside each file are sorted by displayed English/glossary name with the raw ID as a tie-breaker. Expand/collapse file groups to browse them.
 
@@ -817,13 +759,13 @@ The selected discovery file is included in the detail heading, and Coverage list
 
 Search by raw AID or its English/glossary name. The sidebar **Users** count is the number of distinct direct character/class/item owners; **Rows** counts appearance-table rows mentioning the AID. Neither count means all runtime uses. **Copy AID** copies the exact identifier for pasting into an editable character/class/item asset flag.
 
-| Tab | What it shows |
-|---|---|
-| Who uses it | Current Person/Job/Item asset-flag assignments, negated flags, and related-character links. Double-click a row or choose **Open selected entry** to navigate to its editor. Scenario records are revealed when necessary. |
-| Rules & flags | Named condition-set definitions and appearance-table mentions, including unnamed rows, negated tests and mixed references. Select a row to inspect all its fields and nested condition groups. |
-| Linked data | Named links from positive references, including body/head/hair settings and FID voice/portrait records. For example, Majide links to voice Maj0 and portrait 095; Dietrich has normal, later and other conditional records. |
-| Other references | Exact on-disk string occurrences in readable GameData tables, with source file and string offset. These are evidence of text references, not confirmed assignments. |
-| Coverage | Indexed files, per-table group counts, skipped files and interpretation limits. |
+| Tab              | What it shows                                                                                                                                                                                                               |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Who uses it      | Current Person/Job/Item asset-flag assignments, negated flags, and related-character links. Double-click a row or choose **Open selected entry** to navigate to its editor. Scenario records are revealed when necessary.   |
+| Rules & flags    | Named condition-set definitions and appearance-table mentions, including unnamed rows, negated tests and mixed references. Select a row to inspect all its fields and nested condition groups.                              |
+| Linked data      | Named links from positive references, including body/head/hair settings and FID voice/portrait records. For example, Majide links to voice Maj0 and portrait 095; Dietrich has normal, later and other conditional records. |
+| Other references | Exact on-disk string occurrences in readable GameData tables, with source file and string offset. These are evidence of text references, not confirmed assignments.                                                         |
+| Coverage         | Indexed files, per-table group counts, skipped files and interpretation limits.                                                                                                                                             |
 
 Appearance tables are structurally decoded, including 6,184 main rules, 307 asset-information rows, 20 variation rows, 612 voice/portrait rows and 182 condition-set rows in the supplied main table. Side-file rows remain separate; the browser does not assume an overlay order. Color values are displayed as raw byte strings rather than assuming a channel order.
 
@@ -837,18 +779,18 @@ AID browsing alone does not dirty your project. Appearance edits are included in
 
 The supplied Job.bin contains **137 class records and 134 fields per record**. All primary class fields are editable. Original class IDs and indexes stay fixed; 0.20 can append new classes without renaming or deleting the originals.
 
-| Tab | Contents |
-|---|---|
-| Overview | Name and description keys, movement type, rank, gender, support-effect reference, dismounted class, mount reference, icon, appearance flag and class family |
-| Stats | Five signed 16-bit stat blocks including class bases and class growth bonuses, signed 8-bit minimum stats, and both signed/unsigned aptitude columns |
-| Skills & gear | Exclusive equipment, general class skills, ally/enemy skills, special-attack skills, combat arts, attribute skills and mastery skills |
-| Promotion | Lower/upper class links, visible/hidden conditions, required item, barred characters, display weapon, failure coefficient and return-exam value |
-| Advanced | AI/deployment values, adjustment rate, difficulty reference, experience, duration, size, battle ranges and shared numeric values |
-| Used by | Current explicit JID references across loaded editable modules, plus observed GLID class-name cells; open a selected reference to navigate to its record |
+| Tab           | Contents                                                                                                                                                    |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Overview      | Name and description keys, movement type, rank, gender, support-effect reference, dismounted class, mount reference, icon, appearance flag and class family |
+| Stats         | Five signed 16-bit stat blocks including class bases and class growth bonuses, signed 8-bit minimum stats, and both signed/unsigned aptitude columns        |
+| Skills & gear | Exclusive equipment, general class skills, ally/enemy skills, special-attack skills, combat arts, attribute skills and mastery skills                       |
+| Promotion     | Lower/upper class links, visible/hidden conditions, required item, barred characters, display weapon, failure coefficient and return-exam value             |
+| Advanced      | AI/deployment values, adjustment rate, difficulty reference, experience, duration, size, battle ranges and shared numeric values                            |
+| Used by       | Current explicit JID references across loaded editable modules, plus observed GLID class-name cells; open a selected reference to navigate to its record    |
 
 Raw enum values stay numeric. Their option meanings are not yet verified, so the UI does not invent descriptive dropdown choices. Stat columns retain their original order and show their offsets. The identified blocks use the user-provided labels below. Remaining block meanings are not yet verified and keep their original numbers. The two aptitude columns preserve their distinct signedness.
 
-### Creating classes — experimental in 0.20
+### Creating classes
 
 1. Choose **Classes → Overview → Duplicate class…** to copy the selected class's **134 current field values**, including valid pending edits, stats, skills/equipment, asset keys, nested condition groups and lower/upper/dismount links. **New class…** creates zero-valued numeric fields and empty strings/lists instead. Starting from an existing class is recommended.
 2. Enter a unique **`JID_`** ID. Original IDs and row indexes remain unchanged. Unicode and literal pipe suffixes are supported; whitespace, nulls, quotes, `, ; ! &` and `::` separators are rejected. New records are appended and receive unused ascending header tags. The meaning of those tags and engine record limits remain unverified.
@@ -862,19 +804,19 @@ Raw enum values stay numeric. Their option meanings are not yet verified, so the
 
 **In-game behavior is not yet verified.** Test one duplicated class assigned to one character in a separate mod first. Engine capacity, header-tag meaning, class availability, asset completeness and save compatibility cannot be established by file round-trip tests. Keep source and save backups. Character creation is available in 0.21 below. Terrain remains pending.
 
-### Identified stat labels (0.4.1)
+### Identified stat labels
 
 These labels were supplied by the user. Only display labels changed; offsets, values, data types and project compatibility are unchanged.
 
-| Module | Original column | Display label | Starting offset |
-|---|---|---|---|
-| Classes | Block 2 | Class bases | `0x136` |
-| Classes | Block 5 | Class growth bonuses | `0x178` |
-| Classes | Extra | Minimum stats | `0x219` |
-| Characters | Block 1 | Personal bases | `0x1C2` |
-| Characters | Block 5 | Personal growths | `0x21C` |
-| Character aptitudes | Block 1 | Starting value | `0x248` |
-| Character aptitudes | Block 2 | Aptitude growth | `0x255` |
+| Module              | Original column | Display label        | Starting offset |
+| ------------------- | --------------- | -------------------- | --------------- |
+| Classes             | Block 2         | Class bases          | `0x136`         |
+| Classes             | Block 5         | Class growth bonuses | `0x178`         |
+| Classes             | Extra           | Minimum stats        | `0x219`         |
+| Characters          | Block 1         | Personal bases       | `0x1C2`         |
+| Characters          | Block 5         | Personal growths     | `0x21C`         |
+| Character aptitudes | Block 1         | Starting value       | `0x248`         |
+| Character aptitudes | Block 2         | Aptitude growth      | `0x255`         |
 
 Class aptitude columns remain Signed/Unsigned; the new aptitude labels apply to the character editor. Remaining stat columns retain their block numbers. Headers wrap to keep the compact layout.
 
@@ -895,16 +837,16 @@ Lower/upper/dismounted class links are actual pointers to class records. The cho
 
 **Used by** scans the current in-memory Person.bin, including character edits made during this session. It does not inspect GLID/LID progression, deployment files or scripts and is not a complete runtime usage map. Job.bin's auxiliary mount and support-effect tables are preserved, but their records are not separate editable modules in this release.
 
-## Event editor — new in 0.22
+## Event editor
 
 Choose **Module → Events**, then its **Event source**. The full original folder now loads **204 physical documents**: the previous 191 plus 13 event files. This adds event data editing; it does not add dialogue-text writing.
 
-| Sources | What can be edited |
-|---|---|
-| Variable.bin, Variable_P0.bin, Variable_P1.bin | Initial/minimum/maximum values, value labels, raw update/change codes, nested condition groups, dates and result codes |
+| Sources                                                                                                                  | What can be edited                                                                                                                       |
+| ------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Variable.bin, Variable_P0.bin, Variable_P1.bin                                                                           | Initial/minimum/maximum values, value labels, raw update/change codes, nested condition groups, dates and result codes                   |
 | Timeline_Com.bin, Timeline_Part0_Ism.bin, Timeline_Part1_Dit/Kai/Led/Seo.bin, Timeline_Part2.bin, Timeline_Part3_Ism.bin | Ordered event type/argument rows, nested conditions, interval flags, dates, locations, destinations, locators and message-key references |
-| Chapter.bin | Part/chapter/route codes, conditions and permission flags |
-| Situation.bin | Condition groups, dates, location/placement and accompanying-group references |
+| Chapter.bin                                                                                                              | Part/chapter/route codes, conditions and permission flags                                                                                |
+| Situation.bin                                                                                                            | Condition groups, dates, location/placement and accompanying-group references                                                            |
 
 These contain **4,631 native rows and 72,545 field values**. The sidebar selects a variable/rule or a native timeline collection. The Entries tab selects an existing row; the form shows raw values beside English/glossary explanations, with a separate date/schedule tab where applicable. Unknown event/enum values remain numeric rather than receiving invented names. Nested conditions retain their exact groups; this editor does not simulate evaluation or infer a full AND/OR grammar.
 
@@ -926,7 +868,7 @@ The existing compact editor is retained, including its identity, class/learning/
 
 Original character PIDs, indexes and serials stay fixed. New characters can be appended in 0.21; each new serial is chosen once at creation and then locked. Forced skills and role flags can affect convoy access, Blaze eligibility and route behavior. Asset fields reuse existing appearance rules; they do not provide model/portrait previews or automatic full-character swaps.
 
-### Creating characters — experimental in 0.21
+### Creating characters
 
 1. Choose **Characters → Character tab → Duplicate character…**. This copies all current editable values, including valid pending edits, stats, aptitudes, class/LID/GLID references, skills, items, name/internal identifier, appearance and support/profile links. **New character…** starts with numeric zeros and empty strings/lists. Original PIDs and row indexes remain unchanged; new records append after the 2,923 native records.
 2. Enter a unique **`PID_`** ID. Unicode and literal pipe suffixes are accepted. Whitespace, nulls, quotes, `, ; ! &` and `::` separators are rejected. IDs cannot rename or replace an existing source entry.
@@ -958,7 +900,7 @@ All translations work offline. Arbitrary unknown Japanese prose is not machine-t
 
 ## Scope and validation
 
-Supported data layout: the supplied **1.00** files. Edited exports have **not yet been tested in-game**. Structural verification does not prove every manually entered reference exists or that every field combination is valid for gameplay.
+Structural verification does not prove every manually entered reference exists or that every field combination is valid for gameplay.
 
 Validation includes:
 
@@ -1029,9 +971,7 @@ The packaged health check can be repeated without touching a project:
 
 It checks frozen UI-module imports, native Zstandard decoding (including Japanese UTF-8), and creation of the actual editor window with all sixteen modules. It uses temporary preferences and writes the JSON report after success. Full data-editing regressions remain in `tests/` in the source archive.
 
-
 Version 0.15 passed **112 data tests** on Linux and Windows CPython, **all fifteen Linux Tk GUI regressions**, and **eight focused Windows Tk regressions** covering Legion, deployment, AIDs, items, skills, learning, GLID progression and saved-path reopening. Windows GUI checks use CPython/Tk through Wine; only Linux screenshot commands are omitted. Its final frozen executable passes startup/import/native-decompression checks with all fourteen modules. No edited mod has been tested in-game.
-
 
 Version 0.16 passed **122 data tests** on Linux and Windows CPython, **all sixteen Linux Tk GUI regressions**, and **eight focused Windows Tk regressions** covering expanded progression/difficulty, Characters, learning, GLID progression, items, skills, Legion and saved-path reopening. The new GUI check also exercises shared v1/v2 projects, nested skill rows, source/section restoration, exact links and 191-file exports. Windows UI checks use Wine; the frozen executable verifies startup/import/native Zstandard with all fifteen modules. No edited mod has been tested in-game.
 
@@ -1047,16 +987,8 @@ Version 0.21 passes **178 data tests** on Linux and Windows CPython, **all twent
 
 Version 0.22 passes **191 data tests** on Linux and Windows CPython, **all twenty-two Linux Tk GUI regressions**, and focused Windows Tk GUI checks. New coverage includes all 13 sources/four schemas, all 72,545 native event values, opaque bytes/relocations, immutable identities, nested condition copy-on-write, the exact Majide cape chain, ordered arguments/dates, project/source rollback, current event PID references, all 183 read-only compiled wrappers and 204-file exports. Compiled-bytecode and in-game validation remain separate from binary round-trip checks. The frozen executable passes new-module imports, native-Zstandard decoding and startup with all sixteen modules. Synthetic-only runs skip 50 private-data tests. Windows tests use Windows CPython/Tk through Wine; physical Windows validation remains pending.
 
-
-## Compiled script editing (0.23)
+## Compiled script editing
 
 Tools → Script editor… opens the new function/instruction and string-constant editor. See [SCRIPT-EDITOR.md](SCRIPT-EDITOR.md) for the workflow, precise limits, script-aware suite v2 projects and compressed `romfs/Script` exports. GameData-only loading still has 204 files; each selected script adds one workspace/project/export source. Existing GameData-only projects remain supported. Structural round-trip checks are separate from in-game validation.
 
 Version 0.23 passes **202 data tests** on Linux and Windows CPython, including all **183 compiled scripts / 10,554 function bodies / 490,221 instructions / 11,536 runtime constants**, complete parse/rebuild and representative constant/literal mutations. The new tests cover string-cache aliases without metadata changes, integer-encoding boundaries, constrained instructions/call signatures, compressed Script exports, source protection, transactional project replay and live PID/JID/IID/SID reference guards. Eight focused Linux Tk GUI regressions pass, along with a separate script-editor check through the real Linux command-line entry point. Synthetic-only runs skip 51 private-data tests. The frozen Windows x64 executable passes startup, all sixteen modules, script-component imports and native Zstandard checks. Windows checks use Windows CPython/Tk through Wine; physical Windows and edited-event in-game validation remain pending.
-
-
-## Renamed in 0.24
-
-The official name is **Credna's Creation Kit**. Release archives and the Windows executable use `Crednas-Creation-Kit` as the filename stem. The Linux entry point remains `fw_editor.py`, the existing desktop-file ID is reused, and the legacy `fw-character-editor` preferences location and `FW_EDITOR_CONFIG` override remain valid. Project format identifiers (`fw-…`) stay unchanged for compatibility. Save your project before upgrading, extract the entire new package, and rerun `bash install.sh` on Linux to update the shortcut name/path. The software license and third-party notices are unchanged.
-
-Version 0.24's branding update passes the synthetic suite on Linux and Windows CPython (202 tests run, 51 private-data tests skipped), Linux startup/name/decompression checks, three focused real-data GUI regressions (editing, remembered-project reopening, script editing/export), isolated desktop/menu launcher generation, and the renamed Windows x64 executable's frozen startup/name/native-Zstandard health check with all sixteen modules. Data formats and editing behavior are unchanged from 0.23.
