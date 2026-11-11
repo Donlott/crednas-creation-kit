@@ -1,0 +1,144 @@
+name: Publish Linux and Windows release
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Commit, tag or branch to package
+        required: true
+        default: main
+  push:
+    branches: [main]
+    paths: ['.github/workflows/publish-release.yml']
+permissions:
+  contents: read
+concurrency:
+  group: publish-creation-kit
+  cancel-in-progress: false
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    outputs:
+      commit: ${{ steps.package.outputs.commit }}
+      version: ${{ steps.package.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref || github.sha }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Package Linux application and installer
+        id: package
+        shell: python
+        run: |
+          from pathlib import Path
+          import os, re, subprocess, zipfile
+          from branding import APP_SLUG
+          from fw_editor import VERSION
+          assert APP_SLUG == 'Crednas-Creation-Kit'
+          assert re.fullmatch(r'\d+\.\d+(?:\.\d+)?', VERSION)
+          names = subprocess.check_output(['git', 'ls-files', '-z']).decode().rstrip('\0').split('\0')
+          # The original repository has a five-byte initialization marker.
+          names = [name for name in names if name != 'test']
+          allowed = {'.py', '.md', '.txt', '.sh', '.bat', '.yml', '.terms'}
+          for name in names:
+              path = Path(name)
+              assert path.is_file() and not path.is_symlink(), name
+              assert path.suffix.lower() in allowed or name in ('.gitignore', 'LICENSE') or path.parts[0] == 'licenses', name
+              assert not set(path.parts) & {'GameData', 'Script', 'romfs', 'USen', 'build', 'dist', '__pycache__', '.git'}, name
+              assert '\0' not in path.read_bytes().decode('utf8'), name
+          output = Path('release-assets'); output.mkdir()
+          target = output / f'{APP_SLUG}-{VERSION}-Linux.zip'
+          with zipfile.ZipFile(target, 'w', zipfile.ZIP_DEFLATED) as archive:
+              for name in names:
+                  archive.write(name, APP_SLUG + '/' + name)
+          with zipfile.ZipFile(target) as archive:
+              assert archive.testzip() is None
+              assert len(archive.namelist()) == len(names)
+              assert archive.read(APP_SLUG + '/install.sh') == Path('install.sh').read_bytes()
+          commit = subprocess.check_output(['git', 'rev-parse', 'HEAD']).decode().strip()
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'commit={commit}\nversion={VERSION}\n')
+          print(f'Packaged {len(names)} UTF-8 software files: {target}')
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-linux
+          path: release-assets/*-Linux.zip
+          if-no-files-found: error
+  windows:
+    needs: linux
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.linux.outputs.commit }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: x64
+      - run: python -m pip install -r requirements-windows-build.txt
+      - run: python build_windows.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-windows
+          path: dist/*-Windows-x64.zip
+          if-no-files-found: error
+  publish:
+    needs: [linux, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_VERSION: ${{ needs.linux.outputs.version }}
+      RELEASE_COMMIT: ${{ needs.linux.outputs.commit }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: release-assets
+      - name: Verify packages and publish release
+        shell: python
+        run: |
+          from pathlib import Path
+          import hashlib, json, os, subprocess, zipfile
+          folder = Path('release-assets')
+          version = os.environ['RELEASE_VERSION']; commit = os.environ['RELEASE_COMMIT']; tag = 'v' + version
+          names = [f'Crednas-Creation-Kit-{version}-Linux.zip', f'Crednas-Creation-Kit-{version}-Windows-x64.zip']
+          assert {p.name for p in folder.iterdir()} == set(names)
+          checks = []
+          for name in names:
+              path = folder / name
+              with zipfile.ZipFile(path) as archive:
+                  assert archive.testzip() is None
+                  for entry in archive.infolist():
+                      parts = Path(entry.filename).parts
+                      assert not set(parts) & {'GameData', 'Script', 'romfs', 'USen', 'firmware', 'saves'}, entry.filename
+                      assert not entry.filename.lower().endswith(('.bin', '.zst', '.nsp', '.xci', '.nca', '.keys', '.rar')), entry.filename
+                  required = 'install.sh' if name.endswith('-Linux.zip') else 'Crednas-Creation-Kit.exe'
+                  assert 'Crednas-Creation-Kit/' + required in archive.namelist()
+              checks.append(hashlib.sha256(path.read_bytes()).hexdigest() + '  ' + name)
+          (folder / 'SHA256SUMS.txt').write_text('\n'.join(checks) + '\n')
+          def gh(*args, **kw):
+              return subprocess.run(['gh', *args], text=True, **kw)
+          view = gh('release', 'view', tag, '--json', 'isDraft', capture_output=True)
+          if view.returncode == 0:
+              assert json.loads(view.stdout)['isDraft'], 'A published release already exists; refusing to replace it.'
+          else:
+              # This call surfaces authentication/network errors instead of hiding them.
+              notes = 'Windows: extract the Windows-x64 ZIP and run Crednas-Creation-Kit.exe. Linux: extract the Linux ZIP and run bash install.sh (Python 3.10+, Tk and libzstd required). No game files are included.'
+              gh('release', 'create', tag, '--draft', '--target', commit, '--title', "Credna's Creation Kit " + version, '--notes', notes, check=True)
+          gh('release', 'upload', tag, *(str(folder / name) for name in names), str(folder / 'SHA256SUMS.txt'), '--clobber', check=True)
+          release = json.loads(subprocess.check_output(['gh', 'api', f'repos/{os.environ["GH_REPO"]}/releases/tags/{tag}'], text=True))
+          expected = {p.name: p for p in folder.iterdir()}
+          assert {asset['name'] for asset in release['assets']} == set(expected)
+          for asset in release['assets']:
+              path = expected[asset['name']]
+              assert asset['state'] == 'uploaded' and asset['size'] == path.stat().st_size
+              digest = asset.get('digest')
+              if digest:
+                  assert digest == 'sha256:' + hashlib.sha256(path.read_bytes()).hexdigest()
+          gh('release', 'edit', tag, '--target', commit, '--draft=false', '--latest', check=True)
+          print(f'Published {tag}: Linux, Windows x64 and SHA256SUMS.txt')
