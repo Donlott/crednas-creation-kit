@@ -32,7 +32,8 @@ jobs:
         shell: python
         run: |
           from pathlib import Path
-          import os, re, subprocess, zipfile
+          import os, re, subprocess, sys, zipfile
+          sys.path.insert(0, str(Path.cwd()))
           from branding import APP_SLUG
           from fw_editor import VERSION
           assert APP_SLUG == 'Crednas-Creation-Kit'
