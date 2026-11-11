@@ -32,8 +32,10 @@ def main():
     with zipfile.ZipFile(bundle, 'w', zipfile.ZIP_DEFLATED) as archive:
         folder = name+'/'
         archive.write(executable, folder+executable.name)
-        for filename in ('README-Windows.txt', 'README.md', 'EVENT-RESEARCH.md', 'SCRIPT-EDITOR.md', 'GITHUB-UPLOAD.md', 'LICENSE'):
+        for filename in ('README-Windows.txt', 'README.md', 'LICENSE'):
             archive.write(root/filename, folder+filename)
+        for page in sorted((root/'docs').rglob('*.md')):
+            archive.write(page, folder+page.relative_to(root).as_posix())
         # Preserve notices for bundled libraries, including Python, Tcl/Tk and Zstd.
         python_license = Path(sys.base_prefix)/'LICENSE.txt'
         if not python_license.is_file():

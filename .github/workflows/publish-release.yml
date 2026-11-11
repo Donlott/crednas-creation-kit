@@ -36,8 +36,6 @@ jobs:
           assert APP_SLUG == 'Crednas-Creation-Kit'
           assert re.fullmatch(r'\d+\.\d+(?:\.\d+)?', VERSION)
           names = subprocess.check_output(['git', 'ls-files', '-z']).decode().rstrip('\0').split('\0')
-          # The original repository has a five-byte initialization marker.
-          names = [name for name in names if name != 'test']
           allowed = {'.py', '.md', '.txt', '.sh', '.bat', '.yml', '.terms'}
           for name in names:
               path = Path(name)
