@@ -6,9 +6,6 @@ on:
         description: Commit, tag or branch to package
         required: true
         default: main
-  push:
-    branches: [main]
-    paths: ['.github/workflows/publish-release.yml']
 permissions:
   contents: read
 concurrency:
@@ -132,7 +129,9 @@ jobs:
               notes = 'Windows: extract the Windows-x64 ZIP and run Crednas-Creation-Kit.exe. Linux: extract the Linux ZIP and run bash install.sh (Python 3.10+, Tk and libzstd required). No game files are included.'
               gh('release', 'create', tag, '--draft', '--target', commit, '--title', "Credna's Creation Kit " + version, '--notes', notes, check=True)
           gh('release', 'upload', tag, *(str(folder / name) for name in names), str(folder / 'SHA256SUMS.txt'), '--clobber', check=True)
-          release = json.loads(subprocess.check_output(['gh', 'api', f'repos/{os.environ["GH_REPO"]}/releases/tags/{tag}'], text=True))
+          # Draft releases are readable by ID/API URL, not the published-tag endpoint.
+          api_url = json.loads(subprocess.check_output(['gh', 'release', 'view', tag, '--json', 'apiUrl'], text=True))['apiUrl']
+          release = json.loads(subprocess.check_output(['gh', 'api', api_url], text=True))
           expected = {p.name: p for p in folder.iterdir()}
           assert {asset['name'] for asset in release['assets']} == set(expected)
           for asset in release['assets']:
