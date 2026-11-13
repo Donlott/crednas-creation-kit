@@ -21,7 +21,7 @@ from localization import Translator, JAPANESE
 from asset_index import AssetIndex
 from item_index import reference_ids
 
-VERSION = '1.01'
+VERSION = '1.02'
 MESSAGE_TABLES = ('Person','Job','Skill','Item','Clan','Roster','ScoutInfo','System_Facility','System_Notice','System_Hub','System_Gmap','System_Dungeon','System','BattleTitle','Spot','Divination','Shop','Legion')
 FORMATS = {'u8': 'B', 's8': 'b', 'b8': 'B', 'bool': 'B', 'u16': 'H',
            's16': 'h', 'b16': 'H', 'u32': 'I', 's32': 'i', 'b32': 'I', 'int':'i'}
@@ -651,18 +651,43 @@ class Item(ItemCreation,EditableTable):
         if section in self.views:return self.views[section].by_pid[pid],self.views[section].by_offset[offset]
         return super().edit_target(pid,offset)
 
+    @property
+    def added_count(self):return sum(v.added_count for v in getattr(self,'views',{}).values())
+
+    @property
+    def modified(self):return super().modified or bool(self.added_count)
+
+    def snapshot_edits(self):
+        return (super().snapshot_edits(),{key:deepcopy(v.added_entries) for key,v in self.views.items()})
+
+    def restore_edits(self,state):
+        super().restore_edits(state[0])
+        for key,view in self.views.items():view.added_entries=deepcopy(state[1].get(key,{}));view._index_additions()
+
+    def clear_edits(self):
+        super().clear_edits()
+        for view in self.views.values():view.added_entries={};view._index_additions()
+
     def validate(self):
         for view in self.views.values():
             for row in view.records:view.validate_record(row)
 
     def build(self):
         self.validate()
-        if self.added_item_count:
-            expanded=type(self)(expand_item_raw(self,DataError))
+        if self.added_item_count or self.added_count:
+            raw=expand_item_raw(self,DataError) if self.added_item_count else self.raw
+            if self.added_count:
+                from shop_entries import expanded_raw as expand_shops
+                raw=expand_shops(type(self)(raw),self.views['shops'].added_entries,DataError)
+            expanded=type(self)(raw)
+            shop_additions={pid for view in self.views.values() for pid in view._addition_values}
             for (pid,offset),value in self.changes.items():
-                if pid not in self.new_items:expanded.set(*expanded.edit_target(pid,offset),value)
+                if pid not in self.new_items and pid not in shop_additions:expanded.set(*expanded.edit_target(pid,offset),value)
             for pid in self.new_items:
                 for field in self.fields:expanded.set(expanded.by_pid[pid],field,self.value(self.by_pid[pid],field))
+            for key,view in self.views.items():
+                for pid in view._addition_values:
+                    for field in view.fields:expanded.views[key].set(expanded.views[key].by_pid[pid],field,view.value(view.by_pid[pid],field))
             return expanded.build()
         return super().build()
 
@@ -671,27 +696,45 @@ class Item(ItemCreation,EditableTable):
         if any(pid.partition(':')[0] in self.views for pid,_ in self.changes):project['format']='fw-item-edits-v2'
         if self.added_item_count:
             project.update(format='fw-item-edits-v3',new_items=[{'iid':key,'values':{str(offset):deepcopy(value) for offset,value in values.items()}} for key,values in self.new_items.items()])
+        if self.added_count:
+            view=self.views['shops']
+            project.update(format='fw-item-edits-v4',new_items=project.get('new_items',[]),new_shop_entries=[
+                {'shop':view.names[key],'entries':[{str(off):deepcopy(value) for off,value in values.items()} for values in entries]}
+                for key,entries in view.added_entries.items()])
         return project
 
     def load_project(self,project):
-        if project.get('source_file')!=self.filename or project.get('format') not in ('fw-item-edits-v1','fw-item-edits-v2','fw-item-edits-v3') or project.get('source_sha256')!=self.fingerprint:
+        if project.get('source_file')!=self.filename or project.get('format') not in ('fw-item-edits-v1','fw-item-edits-v2','fw-item-edits-v3','fw-item-edits-v4') or project.get('source_sha256')!=self.fingerprint:
             raise DataError('Item project belongs to a different source file.')
-        if project.get('format')!='fw-item-edits-v3' and project.get('new_items'):raise DataError('New items require the item v3 project format.')
+        if project.get('format') not in ('fw-item-edits-v3','fw-item-edits-v4') and project.get('new_items'):raise DataError('New items require the item v3 project format.')
+        if project.get('format')!='fw-item-edits-v4' and project.get('new_shop_entries'):raise DataError('New shop entries require the item v4 project format.')
         before=self.snapshot_edits()
         try:
             self.clear_edits()
-            if project.get('format')=='fw-item-edits-v3':
+            if project.get('format') in ('fw-item-edits-v3','fw-item-edits-v4'):
                 additions=project.get('new_items')
                 if not isinstance(additions,list):raise DataError('New items must be a list.')
                 for entry in additions:
                     if not isinstance(entry,dict) or set(entry)!={'iid','values'} or not isinstance(entry['values'],dict):raise DataError('Invalid new item definition.')
                     if set(entry['values'])!={str(f.offset) for f in self.fields}:raise DataError('New items must include every supported field.')
                     self.create_item(entry['iid'],values={int(offset):value for offset,value in entry['values'].items()})
+            if project.get('format')=='fw-item-edits-v4':
+                groups=project.get('new_shop_entries');view=self.views.get('shops')
+                if not isinstance(groups,list) or view is None:raise DataError('Shop additions require a supported shop source and a list of inventories.')
+                tables={view.names[t.pid]:t.pid for t in view.collections};seen=set()
+                for group in groups:
+                    if not isinstance(group,dict) or set(group)!={'shop','entries'} or not isinstance(group['shop'],str) or group['shop'] not in tables or group['shop'] in seen:
+                        raise DataError('Invalid or duplicate shop inventory in project.')
+                    seen.add(group['shop']);entries=group['entries']
+                    if not isinstance(entries,list) or not entries:raise DataError('A shop addition must contain at least one entry.')
+                    for values in entries:
+                        if not isinstance(values,dict) or set(values)!={str(f.offset) for f in view.fields}:raise DataError('New shop entries must include every supported field.')
+                        view.append_entry(tables[group['shop']],{int(off):value for off,value in values.items()})
             for change in project['changes']:
                 pid=change['pid'];record,field=self.edit_target(pid,change['offset'])
                 section=pid.partition(':')[0]
                 if section in self.views:
-                    if project['format'] not in ('fw-item-edits-v2','fw-item-edits-v3'):raise DataError('Shop/loot changes require the item v2 project format.')
+                    if project['format'] not in ('fw-item-edits-v2','fw-item-edits-v3','fw-item-edits-v4'):raise DataError('Shop/loot changes require the item v2 project format.')
                     self.views[section].set(record,field,change['value'])
                 else:self.set(record,field,change['value'])
             self.validate()
@@ -929,7 +972,7 @@ def load_suite_project(documents, project):
         if project.get('format')=='fw-skill-edits-v1':
             filename=project.get('source_file')
             if filename not in {kind.filename for kind in SKILL_TABLES}:raise DataError('Unsupported skill source file.')
-        if project.get('format') in ('fw-item-edits-v1','fw-item-edits-v2','fw-item-edits-v3'):
+        if project.get('format') in ('fw-item-edits-v1','fw-item-edits-v2','fw-item-edits-v3','fw-item-edits-v4'):
             filename=project.get('source_file')
             if filename not in {kind.filename for kind in ITEM_TABLES}:raise DataError('Unsupported item source file.')
         if project.get('format')=='fw-appearance-edits-v1':

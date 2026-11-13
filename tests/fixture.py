@@ -478,7 +478,7 @@ def merge_fixture_tables(parts):
     return bytes(header+bodies+struct.pack(f'<{len(ordered)}Q',*ordered)+b''.join(struct.pack('<II',*label) for label in labels)+pool)
 
 
-def shop_fixture():
+def shop_fixture(empty_shops=False):
     """Main item slots and invented shops/loot/value tiers in one file."""
     from shop_data import SECTIONS,EXPECTED
     groups=[]
@@ -486,6 +486,7 @@ def shop_fixture():
         fields=[('Field_'+hex(offset),kind,size,offset) for offset,(kind,size) in EXPECTED[key].items()]
         if key=='shops':
             rows=[('SHOP_ALPHA',[('',{0x20:'MID_Shop_ALPHA',0x28:'IID_SYNTHETIC_A',0x38:['available'],0x48:['IID_SYNTHETIC_A|'],0x58:[3],0x68:150,0x6a:-5,0x6b:1}),('',{0x28:'IID_SYNTHETIC_A|'})]),('SHOP_EMPTY',[]),('SHOP_BETA',[('',{0x28:'IID_SYNTHETIC_A'})])]
+            if empty_shops:rows=[(name,[]) for name,_ in rows]
         elif key=='loot':rows=[('LOT_ALPHA',[('',{0x20:'IID_SYNTHETIC_A',0x30:10}),('',{0x20:'IID_SYNTHETIC_A|',0x30:20,0x38:['conditional']})]),('LOT_BETA',[('',{0x20:'IID_SYNTHETIC_A'})])]
         else:rows=[('TIER_ALPHA',{0x20:100,0x22:50}),('TIER_BETA',{0x20:200,0x22:100})]
         groups.append((native,stride,fields,rows,container))

@@ -1,4 +1,4 @@
-CREDNA'S CREATION KIT 1.01 — WINDOWS x64
+CREDNA'S CREATION KIT 1.02 — WINDOWS x64
 
 NO GAME FILES ARE INCLUDED. This program cannot run or emulate games.
 It only edits files that you provide.

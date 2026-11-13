@@ -1,4 +1,4 @@
-"""Compact shop/lottery collections, fixed entry slots and shared item exports."""
+"""Compact shop inventories, append-only entries and shared item exports."""
 from dataclasses import replace
 from tkinter import ttk
 from item_index import reference_ids
@@ -55,17 +55,30 @@ def suggestions(app,field):
 def refresh_entries(app):
     if not getattr(app,'shop_tree',None) or not app.shop_tree.winfo_exists() or app.current is None:return
     view=app.doc;rows=view.rows_by_table[app.current.pid]
+    current_ids={r.pid for r in rows}
+    for iid in app.shop_tree.get_children():
+        if iid not in current_ids:app.shop_tree.delete(iid)
     for row in rows:
         v=lambda offset:view.value(row,view.by_offset[offset])
-        if view.key=='shops':values=(row.index,item_name(app,v(0x28)),v(0x68),v(0x6b),v(0x6a),v(0x28))
+        if view.key=='shops':values=(str(row.index)+(' +' if row.pid in view._addition_values else ''),item_name(app,v(0x28)),v(0x68),v(0x6b),v(0x6a),v(0x28))
         elif view.key=='loot':values=(row.index,item_name(app,v(0x20)),v(0x30),len(v(0x38)),v(0x20))
         else:values=(row.index,v(0x20),v(0x22),view.names[row.pid])
         if app.shop_tree.exists(row.pid):app.shop_tree.item(row.pid,values=values)
         else:app.shop_tree.insert('','end',iid=row.pid,values=values)
-    note=f'{len(rows)} existing entries. '
+    added=len(view.added_entries.get(app.current.pid,()))
+    note=f'{len(rows)} entries'+(f' ({added} new)' if added else '')+'. '
     if view.key=='loot':note+=f'Stored weight sum: {sum(view.value(row,view.by_offset[0x30]) for row in rows)}. Conditions are not evaluated.'
+    elif view.key=='shops':note+='Original entry indexes are preserved; new entries append to this inventory.'
     else:note+='Native entry headers and counts stay fixed.'
     app.shop_summary.set(note)
+    refresh_actions(app)
+
+
+def refresh_actions(app):
+    actions=getattr(app,'shop_entry_actions',{})
+    for label,enabled in [('Duplicate entry',app.learning_row is not None),('Undo last addition',bool(app.doc.added_entries.get(app.current.pid)))]:
+        button=actions.get(label)
+        if button is not None and button.winfo_exists():button.configure(state='normal' if enabled else 'disabled')
 
 
 def show_entry(app,row):
@@ -80,6 +93,7 @@ def show_entry(app,row):
         else:app.numeric_row(body,i,field,row)
     body.columnconfigure(1,weight=1,uniform='shop');body.columnconfigure(2,weight=1,uniform='shop');bind()
     if app.shop_tree.exists(row.pid):app.shop_tree.selection_set(row.pid);app.shop_tree.see(row.pid)
+    refresh_actions(app)
 
 
 def select_entry(app,event=None):
@@ -140,7 +154,7 @@ def show_table(app,record):
     view=app.doc;active=app.notebook.index('current') if app.notebook.tabs() else 0
     app.clear_previews();app.current=record;app.learning_row=None;app.widgets={}
     for tab in app.notebook.tabs():app.nametowidget(tab).destroy()
-    app.heading.set(collection_name(app,record));app.details.set(f'{view.filename} · {view.title} · '+view.names[record.pid]+' · IDs/counts fixed')
+    app.heading.set(collection_name(app,record));app.details.set(f'{view.filename} · {view.title} · '+view.names[record.pid]+(' · original entry indexes preserved' if view.key=='shops' else ' · IDs/counts fixed'))
     entries=ttk.Frame(app.notebook,padding=7);app.notebook.add(entries,text='Entries')
     note='Shop exchange items and quantities must stay paired. Price, signed discount, stock and restock values are raw; zero/sentinel behavior is unverified.' if view.key=='shops' else 'Lottery weights are unsigned 16-bit values. Conditions and engine probability rules are not evaluated.' if view.key=='loot' else 'Stored causality values for each native tier; no engine conversion formula is inferred.'
     ttk.Label(entries,text=note,style='Hint.TLabel',wraplength=730).pack(anchor='w',pady=(0,6))
@@ -152,6 +166,29 @@ def show_table(app,record):
     app.shop_summary=tk.StringVar();ttk.Label(entries,textvariable=app.shop_summary,style='Hint.TLabel',wraplength=730).pack(anchor='w',pady=4)
     app.shop_tree.bind('<<TreeviewSelect>>',lambda event:select_entry(app,event))
     tools=ttk.Frame(entries);tools.pack(fill='x',pady=4);app.shop_tools=tools
+    app.shop_entry_actions={}
+    if view.key=='shops':
+        creation=ttk.Frame(entries);creation.pack(fill='x',pady=4)
+        def change_entries(action):
+            if not app.apply(True):return
+            try:
+                if action=='add':row=view.append_entry(record.pid)
+                elif action=='duplicate':
+                    if not app.learning_row:return
+                    row=view.duplicate_entry(app.learning_row)
+                else:
+                    view.remove_last_added(record.pid);rows=view.rows_by_table[record.pid];row=rows[-1] if rows else None
+            except Exception as exc:app.error(exc);return
+            app.learning_row=None;app.widgets={};app.clear_previews();refresh_entries(app)
+            if row:show_entry(app,row)
+            else:
+                for child in app.shop_form.winfo_children():child.destroy()
+                ttk.Label(app.shop_form,text='This shop is empty. Use Add entry to add an item.').pack(anchor='w')
+            app.filter();refresh_actions(app)
+            app.status.set('Shop addition undone.' if action=='undo' else 'Shop entry added. Choose the item and configure price, stock and conditions; then save/export.')
+        for label,action in [('Add entry','add'),('Duplicate entry','duplicate'),('Undo last addition','undo')]:
+            button=ttk.Button(creation,text=label,command=lambda action=action:change_entries(action));button.pack(side='left',padx=(0,5))
+            app.shop_entry_actions[label]=button
     def copy_entry():
         if not app.learning_row or not app.apply(True):return
         app.shop_clipboard=(view.key,{f.offset:view.value(app.learning_row,f) for f in view.fields})
@@ -180,6 +217,6 @@ def show_table(app,record):
     for label,action in [('Copy entry',copy_entry),('Paste values',paste_entry),('Reset entry',reset_entry),('Open item',open_item)]:ttk.Button(tools,text=label,command=action).pack(side='left',padx=(0,5))
     refresh_entries(app);rows=view.rows_by_table[record.pid]
     if rows:show_entry(app,rows[0])
-    else:ttk.Label(lower,text='Empty collection. Entry counts stay fixed in this release.').pack(anchor='w')
+    else:ttk.Label(lower,text='This shop is empty. Use Add entry to add an item.' if view.key=='shops' else 'Empty collection. Entry counts stay fixed in this release.').pack(anchor='w')
     links=ttk.Frame(app.notebook,padding=8);app.notebook.add(links,text='Connected entries');connected(app,links,record)
     app.notebook.select(min(active,1))

@@ -14,7 +14,9 @@ EXPECTED={
 
 
 def create_model(CollectionTable,Field,Record,DataError):
-    class ShopView(CollectionTable):
+    from shop_entries import create_mixin
+    ShopEntries=create_mixin(Record,DataError)
+    class ShopView(ShopEntries,CollectionTable):
         prefix='SHOP_';locked_offsets=frozenset()
         def __init__(self,owner,key,group):
             self.owner=owner;self.key=key;self.title,self.group_name,_,_,self.container=SECTIONS[key]
@@ -28,6 +30,7 @@ def create_model(CollectionTable,Field,Record,DataError):
             if len(self.by_offset)!=count or {f.offset:(f.kind,f.size) for f in self.fields}!=EXPECTED[key]:
                 raise DataError('Unsupported '+self.filename+' '+self.title+' layout.')
             self.collections=[];self.records=[];self.names={};self.rows_by_table={};self.row_location={};self.collection_offsets=[]
+            self.added_entries={};self._addition_values={}
             start=schema+count*32
             def append(at,index,table):
                 if at<32 or at+self.stride>32+self.size or struct.unpack_from('<HH',self.raw,at+16)!=(index,1):
@@ -54,6 +57,7 @@ def create_model(CollectionTable,Field,Record,DataError):
                     for row in range(amount):append(pointer+32+row*self.stride,row,table)
             if not self.collections:raise DataError('No supported shop/loot collections were found.')
             self.by_pid={r.pid:r for r in self.records};self.tables_by_id={r.pid:r for r in self.collections}
+            self._source_rows={key:list(rows) for key,rows in self.rows_by_table.items()};self._source_names=dict(self.names)
             for row in self.records:
                 for field in self.fields:self.original(row,field)
         @property
