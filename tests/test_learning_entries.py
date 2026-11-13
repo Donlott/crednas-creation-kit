@@ -158,7 +158,7 @@ class LearningEntryTests(unittest.TestCase):
         with self.assertRaises(DataError):d.append_entry('LID_SYNTHETIC_A')
         self.assertFalse(d.modified);self.assertEqual(d.build(),bytes(raw))
 
-    def test_export_manifest_reedit_references_backups_and_sources(self):
+    def test_export_manifest_reedit_references_no_backups_and_sources(self):
         d=self.doc;row=d.append_entry('LID_SYNTHETIC_A');d.set(row,d.by_offset[0x28],'SID_NEW')
         uses=SkillIndex().uses('SID_NEW',{'Learning tables':d})
         self.assertEqual([(u.table,u.row) for u in uses],[('LID_SYNTHETIC_A',2)])
@@ -170,7 +170,7 @@ class LearningEntryTests(unittest.TestCase):
             manifest=json.loads((root/'mod/suite-edits.json').read_text());self.assertEqual(manifest['documents']['Growth.bin']['format'],'fw-growth-edits-v3')
             target=root/'mod/romfs/GameData/Growth.bin';reopened=Learning(target.read_bytes())
             reopened.append_entry('LID_SYNTHETIC_A');self.assertEqual(len(Learning(reopened.build()).rows_by_table['LID_SYNTHETIC_A']),4)
-            export_suite({'Growth':d},{'Growth':source},root/'mod');self.assertTrue(list(target.parent.glob('Growth.bin.backup-*')))
+            export_suite({'Growth':d},{'Growth':source},root/'mod');self.assertFalse(list(target.parent.glob('Growth.bin.backup-*')))
             self.assertEqual(source.read_bytes(),d.raw)
 
 

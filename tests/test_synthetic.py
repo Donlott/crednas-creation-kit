@@ -63,8 +63,13 @@ class FormatTests(unittest.TestCase):
             with self.assertRaises(DataError): export_mod(self.doc,source,root/'other')
             self.set(0x1c2,44)
             target=export_mod(self.doc,source,root/'mod')
-            export_mod(self.doc,source,root/'mod')
-            self.assertEqual(len(list(target.parent.glob('*.backup-*'))),1)
+            manual=target.with_name('Person.bin.backup-manual');manual.write_bytes(b'user-owned backup')
+            for hp in (45,46,47,48):
+                self.set(0x1c2,hp);export_mod(self.doc,source,root/'mod')
+            self.assertEqual(list(target.parent.glob('*.backup-*')),[manual])
+            self.assertEqual(manual.read_bytes(),b'user-owned backup')
+            exported=Person(target.read_bytes())
+            self.assertEqual(exported.value(exported.records[0],exported.by_offset[0x1c2]),48)
             self.assertEqual(source.read_bytes(),self.raw)
 
 

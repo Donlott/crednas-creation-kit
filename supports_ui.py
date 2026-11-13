@@ -50,6 +50,7 @@ def row_name(app,record,view=None):
         hint=translated(app,view.anchors[record.pid]) if view.anchors[record.pid] else 'Unlabelled section'
         return hint+f' · route {view.value(record,view.by_offset[0x20])}'
     if view.key=='drinks':return {'好物':'Favorite','通常':'Normal','嫌い':'Disliked'}.get(name,name)
+    if view.key=='assist':return f'Activation {record.index+1}'+(' onward' if record.index==7 else '')
     return f'Occurrence {record.index+1}'+('+' if record.index==7 else '')
 
 
@@ -79,6 +80,31 @@ def refresh_matrix(app):
         key=str(peer.index);row=(translated(app,view.names[peer.pid]),values[peer.index],view.names[peer.pid])
         if app.support_matrix_tree.exists(key):app.support_matrix_tree.item(key,values=row)
         else:app.support_matrix_tree.insert('','end',iid=key,values=row)
+
+
+def guard_rates(app,parent,record):
+    view=app.doc;values=view.guard_rates(record)
+    ttk.Label(parent,text='Wings of Salvation / Salvation Guard',font=('DejaVu Sans',11,'bold')).pack(anchor='w',pady=(0,8))
+    ttk.Label(parent,text='Eshmel’s protection from a fatal blow. Set the activation chance for each Support Lv. Select an activation in the list to edit its rates; the eighth row applies to later activations too.',
+              style='Hint.TLabel',wraplength=700).pack(anchor='w',pady=(0,12))
+    form=ttk.Frame(parent);form.pack(anchor='w')
+    app.support_guard_inputs=[]
+    for col,value in enumerate(values):
+        ttk.Label(form,text=f'Support Lv {col+1}').grid(row=0,column=col,padx=(0,12),pady=(0,5))
+        cell=ttk.Frame(form);cell.grid(row=1,column=col,padx=(0,12))
+        entry=ttk.Spinbox(cell,from_=0,to=100,width=5,justify='right');entry.insert(0,str(value));entry.pack(side='left')
+        ttk.Label(cell,text='%').pack(side='left',padx=(3,0));app.support_guard_inputs.append(entry)
+    def current():
+        try:return [int(w.get(),10) for w in app.support_guard_inputs]
+        except ValueError as exc:raise ValueError('Wings of Salvation: enter whole-number percentages from 0 to 100.') from exc
+    def commit():
+        value=current()
+        if value!=view.guard_rates(record):view.set_guard_rates(record,value)
+    app.support_commit=commit;app.support_dirty=lambda:current()!=view.guard_rates(record)
+    ttk.Label(parent,text='0% disables the chance; 100% maximizes the configured chance. The game’s eligibility rules still apply. These rates are separate from offensive support effects.',
+              style='Hint.TLabel',wraplength=700).pack(anchor='w',pady=(14,8))
+    ttk.Label(parent,text='Apply edits, then save the project or export the mod. Reset entry restores the selected activation’s source values.',
+              style='Hint.TLabel',wraplength=700).pack(anchor='w')
 
 
 def matrix(app,parent,record):
@@ -153,8 +179,9 @@ def show_row(app,record):
     app.clear_previews();app.current=record;app.widgets={};app.support_commit=None;app.support_dirty=None
     for tab in app.notebook.tabs():app.nametowidget(tab).destroy()
     app.heading.set(row_name(app,record));app.details.set(f'Reliance.bin · {view.title} · row {record.index} · native names/order fixed')
-    edit=ttk.Frame(app.notebook,padding=8);app.notebook.add(edit,text='Matrix row' if view.key=='matrix' else 'Fields')
+    edit=ttk.Frame(app.notebook,padding=8);app.notebook.add(edit,text='Matrix row' if view.key=='matrix' else 'Rates (%)' if view.key=='assist' else 'Fields')
     if view.key=='matrix':matrix(app,edit,record)
+    elif view.key=='assist':guard_rates(app,edit,record)
     else:
         body,bind=scroll_body(edit)
         name=view.names[record.pid] or '(empty native name)'

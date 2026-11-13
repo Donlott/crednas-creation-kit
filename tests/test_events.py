@@ -98,14 +98,14 @@ class EventTests(unittest.TestCase):
         self.assertEqual(suite_project(docs),before)
         load_suite_project(docs,Person(p.raw).project());self.assertFalse(d.modified);self.assertFalse(p.new_characters)
 
-    def test_export_source_protection_manifest_backup_and_reedit(self):
+    def test_export_source_protection_manifest_no_backup_and_reedit(self):
         d=EventData(event_fixture('timeline'),'Timeline_Com.bin');v=d.views['timeline'];v.set(v.records[0],v.by_offset[0x28],['BD_Custom'])
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp);source=root/'game/romfs/GameData'/d.filename;source.parent.mkdir(parents=True);source.write_bytes(d.raw)
             export_suite({'Events':d},{'Events':source},root/'mod');target=root/'mod/romfs/GameData'/d.filename
             result=EventData(target.read_bytes(),d.filename);w=result.views['timeline'];self.assertEqual(w.value(w.records[0],w.by_offset[0x28]),['BD_Custom'])
             w.set(w.records[0],w.by_offset[0x28],[]);self.assertTrue(result.build())
-            export_suite({'Events':d},{'Events':source},root/'mod');self.assertEqual(len(list(target.parent.glob('*.backup-*'))),1)
+            export_suite({'Events':d},{'Events':source},root/'mod');self.assertEqual(len(list(target.parent.glob('*.backup-*'))),0)
             self.assertEqual(source.read_bytes(),d.raw)
             self.assertEqual(json.loads((root/'mod/suite-edits.json').read_text())['documents'][d.filename]['format'],'fw-event-edits-v1')
             with self.assertRaises(DataError):export_suite({'Events':d},{'Events':source},root/'game')

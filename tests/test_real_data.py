@@ -111,7 +111,7 @@ class EditorTests(unittest.TestCase):
         for name in ('Job', 'Skill', 'Item', 'Growth', 'Profile'):
             self.assertTrue(Binary((DATA/(name+'.bin')).read_bytes()).labels)
 
-    def test_export_source_protection_and_backups(self):
+    def test_export_source_protection_without_backups(self):
         self.edit(DIETRICH, 0x1c2, 42)
         digest = hashlib.sha256((DATA/'Person.bin').read_bytes()).hexdigest()
         with tempfile.TemporaryDirectory() as directory:
@@ -126,8 +126,8 @@ class EditorTests(unittest.TestCase):
             self.edit(DIETRICH, 0x1c2, 43)
             export_mod(self.doc, DATA/'Person.bin', directory)
             backups = list(target.parent.glob('Person.bin.backup-*'))
-            self.assertEqual(len(backups), 1)
-            self.assertEqual(backups[0].read_bytes(), original_export)
+            self.assertEqual(backups, [])
+            self.assertNotEqual(target.read_bytes(), original_export)
             self.assertTrue((Path(directory)/'character-edits.json').is_file())
         self.assertEqual(hashlib.sha256((DATA/'Person.bin').read_bytes()).hexdigest(), digest)
 

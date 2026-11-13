@@ -33,6 +33,19 @@ def compare(test,d,result,edits):
 class RelianceTests(unittest.TestCase):
     def setUp(self):self.doc=Reliance(reliance_fixture())
 
+    def test_guard_percentages_validate_and_roundtrip_without_changing_other_data(self):
+        d=self.doc;v=d.views['assist'];r=v.records[0]
+        v.set_guard_rates(r,[0,25,50,75,100]);before=dict(d.changes)
+        for bad in ([0,1],[-1,0,0,0,0],[101,0,0,0,0],[True,0,0,0,0],[1.5,0,0,0,0],['20',0,0,0,0]):
+            with self.assertRaises(DataError):v.set_guard_rates(r,bad)
+            self.assertEqual(d.changes,before)
+        with self.assertRaises(DataError):d.views['matrix'].guard_rates(d.views['matrix'].records[0])
+        outside=v.guard_rates(r);outside[0]=99;self.assertEqual(v.guard_rates(r)[0],0)
+        result=Reliance(d.build());compare(self,d,result,before)
+        restored=Reliance(d.raw);restored.load_project(json.loads(json.dumps(d.project())))
+        self.assertEqual(restored.views['assist'].guard_rates(restored.views['assist'].records[0]),[0,25,50,75,100])
+        self.assertEqual(restored.build(),result.raw)
+
     def test_directed_matrix_and_fixed_dimensions(self):
         d=self.doc;m=d.views['matrix'];self.assertEqual(d.build(),d.raw)
         r=m.records[0];values=m.value(r,m.by_offset[0x20]);values[1]=9;m.set(r,m.by_offset[0x20],values)
@@ -80,6 +93,14 @@ class RelianceTests(unittest.TestCase):
 DATA=Path(os.environ.get('FW_GAME_DATA','/nonexistent'))
 @unittest.skipUnless((DATA/'Reliance.bin').is_file(),'Set FW_GAME_DATA for real Reliance regression.')
 class RealRelianceTests(unittest.TestCase):
+    def test_all_guard_activation_rows_and_levels_preserve_native_data(self):
+        d=Reliance((DATA/'Reliance.bin').read_bytes());v=d.views['assist']
+        self.assertEqual(len(v.records),8)
+        for index,r in enumerate(v.records):v.set_guard_rates(r,[index,20,40,60,100])
+        result=Reliance(d.build());compare(self,d,result,dict(d.changes))
+        other=Reliance(d.raw);other.load_project(json.loads(json.dumps(d.project())))
+        self.assertEqual(other.build(),result.raw)
+
     def test_every_section_field_matrix_cell_and_native_byte_preserved(self):
         d=Reliance((DATA/'Reliance.bin').read_bytes());self.assertEqual({k:len(v.records) for k,v in d.views.items()},
             {'matrix':73,'special':314,'talks':515,'scout':214,'assist':8,'voices':165,'drinks':3})

@@ -70,9 +70,17 @@ with tempfile.TemporaryDirectory() as temporary:
                 app.item_usage_tree.selection_set(str(i));app.item_usage_open()
                 assert app.active_module=='Supports & Recruitment' and app.doc.key=='scout' and app.current.index==1
                 assert app.widgets[0x21][1].get()=='0'
-                assert app.switch_module('Supports & Recruitment','assist:0');assert len(app.widgets)==1
-                write(0x20,'[0,10,20,30,40]');assert app.apply()
-                write(0x20,'[1,2]');assert not app.switch_module('Items');write(0x20,'[0,10,20,30,40]');assert app.apply()
+                assert app.switch_module('Supports & Recruitment','assist:0');assert len(app.support_guard_inputs)==5
+                assert app.support_section_choice.get()=='Wings of Salvation'
+                def guard(values):
+                    for w,value in zip(app.support_guard_inputs,values):w.delete(0,'end');w.insert(0,str(value))
+                guard([0,10,20,30,100]);assert app.dirty_widgets() and app.apply()
+                assert app.doc.guard_rates(app.current)==[0,10,20,30,100]
+                guard([0,10,20,30,101]);assert not app.switch_module('Items') and app.doc.key=='assist'
+                guard([0,10,20,30,100]);assert app.apply()
+                assert app.switch_module('Supports & Recruitment','assist:7')
+                guard([0,1,2,3,100]);assert app.apply()
+                app.reset();assert app.doc.guard_rates(app.current)==app.doc.original(app.current,app.doc.by_offset[0x20])
                 assert app.switch_module('Supports & Recruitment','voices:0');assert len(app.widgets)==5
                 write(0x40,'test_voice_label');write(0x48,'voice_switch_flag');assert app.apply()
                 assert app.switch_module('Supports & Recruitment','drinks:0');assert len(app.widgets)==1
@@ -98,6 +106,8 @@ with tempfile.TemporaryDirectory() as temporary:
                 app.geometry('1180x780');app.switch_module('Supports & Recruitment','scout:1');app.notebook.select(0);app.update()
                 previews=Path(os.environ.get('FW_PREVIEW_DIR',temporary));previews.mkdir(parents=True,exist_ok=True)
                 subprocess.run(['import','-display',os.environ['DISPLAY'],'-window',str(app.winfo_id()),str(previews/'supports-scouting.png')],check=True)
+                app.switch_module('Supports & Recruitment','assist:0');app.notebook.select(0);app.update()
+                subprocess.run(['import','-display',os.environ['DISPLAY'],'-window',str(app.winfo_id()),str(previews/'supports-salvation-guard.png')],check=True)
                 app.switch_module('Supports & Recruitment',dietrich.pid);app.notebook.select(0)
                 app.support_matrix_tree.selection_set(str(majide.index));app.update();app.support_matrix_tree.see(str(majide.index));app.update()
                 subprocess.run(['import','-display',os.environ['DISPLAY'],'-window',str(app.winfo_id()),str(previews/'supports-matrix.png')],check=True)

@@ -107,7 +107,7 @@ class ScriptEditorTests(unittest.TestCase):
             target=root/'mod/romfs'/d.filename;self.assertTrue(target.is_file());self.assertFalse((root/'mod/romfs/GameData'/d.filename).exists())
             fresh=ScriptDocument(target.read_bytes(),d.filename);self.assertEqual(fresh.module.constants[1].text,'New runtime constant')
             self.assertEqual(source.read_bytes(),d.raw)
-            export_suite(docs,sources,root/'mod');self.assertEqual(len(list(target.parent.glob('*.backup-*'))),1)
+            export_suite(docs,sources,root/'mod');self.assertEqual(len(list(target.parent.glob('*.backup-*'))),0)
             with self.assertRaises(DataError):export_suite(docs,sources,root/'game')
             project=suite_project(docs);self.assertEqual(project['format'],'fw-hacking-suite-project-v2')
             loaded={'Characters':Person(person.raw)};loaded_sources={'Characters':base/'Person.bin'}

@@ -9,7 +9,7 @@ SECTIONS={
  'special':('Pair bonuses','特殊支援',88,12),
  'talks':('Support conditions','支援会話',136,24),
  'scout':('Recruitment','スカウト',160,14),
- 'assist':('Assist rates','支援援護',48,1),
+ 'assist':('Wings of Salvation','支援援護',48,1),
  'voices':('Linked voices','連携掛合',96,5),
  'drinks':('Tobias items','トビヤススカウト',48,1),
 }
@@ -68,6 +68,19 @@ def create_models(Binary,EditableTable,Field,Record,DataError,supported_types):
             super().set(record,field,value)
 
         def build(self):return self.owner.build()
+
+        def guard_rates(self,record):
+            if self.key!='assist' or set(self.by_offset)!={0x20} or self.by_offset[0x20].kind!='u8[]':
+                raise DataError('This section is not the supported Wings of Salvation rate table.')
+            values=self.value(record,self.by_offset[0x20])
+            if len(values)!=5:raise DataError('Wings of Salvation requires five support-level rate columns.')
+            return values
+
+        def set_guard_rates(self,record,values):
+            self.guard_rates(record)
+            if not isinstance(values,list) or len(values)!=5 or any(type(v) is not int or not 0<=v<=100 for v in values):
+                raise DataError('Wings of Salvation rates must be five whole-number percentages from 0 to 100.')
+            self.set(record,self.by_offset[0x20],values)
 
     class Reliance(EditableTable):
         filename='Reliance.bin';prefix='SUPPORT_';project_format='fw-reliance-edits-v1';locked_offsets=frozenset()

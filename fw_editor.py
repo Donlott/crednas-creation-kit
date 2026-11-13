@@ -11,19 +11,17 @@ import math
 import os
 from pathlib import Path
 import re
-import shutil
 import struct
 import sys
 import tempfile
 from dataclasses import dataclass
-from datetime import datetime
 
 from branding import APP_NAME
 from localization import Translator, JAPANESE
 from asset_index import AssetIndex
 from item_index import reference_ids
 
-VERSION = '1.00'
+VERSION = '1.01'
 MESSAGE_TABLES = ('Person','Job','Skill','Item','Clan','Roster','ScoutInfo','System_Facility','System_Notice','System_Hub','System_Gmap','System_Dungeon','System','BattleTitle','Spot','Divination','Shop','Legion')
 FORMATS = {'u8': 'B', 's8': 'b', 'b8': 'B', 'bool': 'B', 'u16': 'H',
            's16': 'h', 'b16': 'H', 'u32': 'I', 's32': 'i', 'b32': 'I', 'int':'i'}
@@ -992,8 +990,6 @@ def export_suite(documents, sources, directory):
         planned.append((target,doc.build()))
     # Validate and build every table before changing any output file.
     for target,raw in planned:
-        if target.exists():
-            shutil.copy2(target,target.with_name(target.name+'.backup-'+datetime.now().strftime('%Y%m%d-%H%M%S-%f')))
         atomic_write(target,raw)
     atomic_write(manifest,json.dumps(suite_project(documents),ensure_ascii=False,indent=2).encode('utf8'))
     return [target for target,_ in planned]
@@ -1162,8 +1158,6 @@ def export_mod(document, source, directory):
     if target.exists() and not (Path(directory) / 'character-edits.json').is_file():
         raise DataError('That folder already contains character data. Choose an empty mod folder or an earlier editor export.')
     result = document.build()
-    if target.exists():
-        shutil.copy2(target, target.with_name('Person.bin.backup-' + datetime.now().strftime('%Y%m%d-%H%M%S-%f')))
     atomic_write(target, result)
     atomic_write(Path(directory) / 'character-edits.json', json.dumps(document.project(), ensure_ascii=False, indent=2).encode('utf-8'))
     return target

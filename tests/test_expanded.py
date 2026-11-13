@@ -102,7 +102,7 @@ class ExpandedTests(unittest.TestCase):
         curve=g.views['exp_curve'];links=connections(curve,curve.collections[0],docs)
         self.assertTrue(any(target[0]=='Progression & Difficulty' and target[3]=='References this table' for target in links))
 
-    def test_three_file_exports_source_protection_schema_and_backups(self):
+    def test_three_file_exports_source_protection_schema_without_backups(self):
         docs={'Characters':self.person,'Learning tables':self.growth,'Side':self.side}
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp);base=root/'romfs/GameData';base.mkdir(parents=True);sources={}
@@ -110,7 +110,7 @@ class ExpandedTests(unittest.TestCase):
             with self.assertRaises(DataError):export_suite(docs,sources,root)
             target=root/'mod';export_suite(docs,sources,target)
             self.assertEqual({p.name for p in (target/'romfs/GameData').glob('*.bin')},{'Person.bin','Growth.bin','Growth_P0.bin'})
-            export_suite(docs,sources,target);self.assertEqual(len(list((target/'romfs/GameData').glob('*.backup-*'))),3)
+            export_suite(docs,sources,target);self.assertEqual(len(list((target/'romfs/GameData').glob('*.backup-*'))),0)
             loaded,_=read_editable_tables(base);self.assertEqual(len(loaded),3)
         raw=bytearray(self.side.raw);group=next(g for g in Binary(raw).groups() if g[0]=='2部支給アイテム')
         struct.pack_into('<I',raw,group[3]+28,0x24)

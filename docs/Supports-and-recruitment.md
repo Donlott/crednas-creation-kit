@@ -1,6 +1,12 @@
 # Supports & Recruitment
 
-Select **Supports & Recruitment**, then choose a section. The module covers compatibility, pair bonuses, support conditions, recruitment, assist rates, linked voices and related item links. Sections share their original source and export together.
+Select **Supports & Recruitment**, then choose a section. The module covers compatibility, pair bonuses, support conditions, recruitment, Wings of Salvation rates, linked voices and related item links. Sections share their original source and export together.
+
+## Wings of Salvation / Salvation Guard
+
+Choose **Wings of Salvation** in the section menu. Select an activation on the left, then edit its five percentage fields for **Support Lv 1–5**. The final activation row applies to the eighth and later activations. Values must be whole numbers from **0% to 100%**; the game’s eligibility rules still apply.
+
+Use **Apply edits**, then save your project or export the mod. **Reset entry** restores the selected activation’s source values. This is the native support-protection table previously shown as an unlabelled assist-rate vector; existing projects retain their edits. It is separate from offensive support effects. The editor does not simulate battle outcomes.
 
 ## Compatibility and support rules
 

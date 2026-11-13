@@ -98,7 +98,7 @@ class ShopTests(unittest.TestCase):
             with self.assertRaises(DataError):export_suite(docs,sources,root)
             export_suite(docs,sources,root/'mod');self.assertEqual([p.name for p in (root/'mod/romfs/GameData').iterdir()],['Item.bin'])
             verify(self,d,Item((root/'mod/romfs/GameData/Item.bin').read_bytes()))
-            export_suite(docs,sources,root/'mod');self.assertEqual(len(list((root/'mod/romfs/GameData').glob('*.backup-*'))),1)
+            export_suite(docs,sources,root/'mod');self.assertEqual(len(list((root/'mod/romfs/GameData').glob('*.backup-*'))),0)
 
     def test_live_iid_usage_replaces_static_rows_and_preserves_primary_view(self):
         d=self.doc

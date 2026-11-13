@@ -68,7 +68,7 @@ class FacilityTests(unittest.TestCase):
         self.assertEqual(p0.fingerprint,p1.fingerprint)
         with self.assertRaises(DataError):p1.load_project(p0.project())
 
-    def test_suite_export_guard_backups_and_old_project_replacement(self):
+    def test_suite_export_guard_no_backups_and_old_project_replacement(self):
         docs={kind.filename:kind(facility_fixture(kind.filename)) for kind in FACILITY_TABLES}
         docs['Profiles']=Profile(profile_fixture());self.edit('cooking',0,0x34,900,docs['Facility.bin'])
         project=suite_project(docs);docs['Facility.bin'].changes={};load_suite_project(docs,project)
@@ -78,7 +78,7 @@ class FacilityTests(unittest.TestCase):
             with self.assertRaises(DataError):export_suite(docs,sources,root)
             out=root/'mod';export_suite(docs,sources,out);export_suite(docs,sources,out)
             self.assertEqual(len(list((out/'romfs/GameData').glob('*.bin'))),5)
-            self.assertEqual(len(list((out/'romfs/GameData').glob('*.backup-*'))),5)
+            self.assertEqual(len(list((out/'romfs/GameData').glob('*.backup-*'))),0)
             self.assertEqual(Facility((out/'romfs/GameData/Facility.bin').read_bytes()).views['cooking'].value(docs['Facility.bin'].views['cooking'].records[0],docs['Facility.bin'].views['cooking'].by_offset[0x34]),900)
         load_suite_project(docs,docs['Profiles'].project());self.assertEqual(docs['Facility.bin'].changes,{})
 

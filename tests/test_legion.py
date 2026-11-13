@@ -77,7 +77,7 @@ class LegionTests(unittest.TestCase):
             with self.assertRaises(DataError):export_suite(docs,sources,root)
             target=root/'mod';export_suite(docs,sources,target)
             result=Legion((target/'romfs/GameData/Legion.bin').read_bytes());compare(self,d,result,dict(d.changes))
-            export_suite(docs,sources,target);self.assertEqual(len(list((target/'romfs/GameData').glob('Legion.bin.backup-*'))),1)
+            export_suite(docs,sources,target);self.assertEqual(len(list((target/'romfs/GameData').glob('Legion.bin.backup-*'))),0)
             loaded,_=read_editable_tables(root/'romfs/GameData');self.assertEqual(set(loaded),{'Legion'})
             self.assertEqual(source.read_bytes(),d.raw)
 

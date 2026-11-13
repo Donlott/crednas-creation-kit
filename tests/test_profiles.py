@@ -62,7 +62,7 @@ class ProfileTests(unittest.TestCase):
             with self.assertRaises(DataError):export_suite(docs,sources,root)
             out=root/'mod';export_suite(docs,sources,out);self.assertEqual({p.name for p in (out/'romfs/GameData').iterdir()},{'Profile.bin','Item.bin'})
             self.assertEqual(Profile((out/'romfs/GameData/Profile.bin').read_bytes()).views['profiles'].value(d.views['profiles'].records[0],d.views['profiles'].by_offset[0xf0]),['IID_NEW'])
-            export_suite(docs,sources,out);self.assertEqual(len(list((out/'romfs/GameData').glob('*.backup-*'))),2)
+            export_suite(docs,sources,out);self.assertEqual(len(list((out/'romfs/GameData').glob('*.backup-*'))),0)
         load_suite_project(docs,item.project());self.assertEqual(d.changes,{})
         load_suite_project(docs,d.project());self.assertEqual(item.changes,{})
 

@@ -97,7 +97,7 @@ class ClassCreationTests(unittest.TestCase):
         app=SimpleNamespace(catalog={},documents=docs);self.assertIn(r.pid,reference_ids(app,'JID_'))
         d.remove_class(r.pid);self.assertNotIn(r.pid,reference_ids(app,'JID_'))
 
-    def test_export_sources_manifest_backups_and_reedit(self):
+    def test_export_sources_manifest_no_backups_and_reedit(self):
         d=self.d;d.create_class('JID_Export',d.records[0].pid)
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp);source=root/'game/romfs/GameData/Job.bin';source.parent.mkdir(parents=True);source.write_bytes(d.raw)
@@ -106,7 +106,7 @@ class ClassCreationTests(unittest.TestCase):
             self.assertEqual(len(Job(result.build()).records),4)
             manifest=json.loads((root/'mod/suite-edits.json').read_text())
             self.assertEqual(manifest['documents']['Job.bin']['format'],'fw-class-edits-v2')
-            export_suite(docs,{'Classes':source},root/'mod');self.assertEqual(len(list(target.parent.glob('*.backup-*'))),1)
+            export_suite(docs,{'Classes':source},root/'mod');self.assertEqual(len(list(target.parent.glob('*.backup-*'))),0)
             self.assertEqual(source.read_bytes(),d.raw)
             with self.assertRaises(DataError):export_suite(docs,{'Classes':source},root/'game')
 

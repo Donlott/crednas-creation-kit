@@ -50,7 +50,7 @@ class ItemTests(unittest.TestCase):
                 self.assertEqual(sources[key].read_bytes(),doc.raw)
                 result=type(doc)((base/'mod/romfs/GameData'/doc.filename).read_bytes())
                 for (pid,off),value in doc.changes.items():self.assertEqual(result.original(*result.edit_target(pid,off)),value)
-            export_suite(docs,sources,base/'mod');self.assertEqual(len(list((base/'mod/romfs/GameData').glob('*.backup-*'))),9)
+            export_suite(docs,sources,base/'mod');self.assertEqual(len(list((base/'mod/romfs/GameData').glob('*.backup-*'))),0)
         for d in docs.values():d.changes={}
         load_suite_project(docs,project);self.assertEqual(before,{k:d.changes for k,d in docs.items()})
         old={'format':'fw-hacking-suite-project-v1','documents':{k:v for k,v in project['documents'].items() if not k.startswith('Item')}}

@@ -8,7 +8,7 @@
 
 ## Export a mod
 
-Choose **Export mod…** and select a separate output folder. The exporter validates supported edits and writes the edited files in the output layout required by the mod, while protecting the loaded originals. Replacing files owned by an earlier editor export creates backups; unrelated files are refused.
+Choose **Export mod…** and select a separate output folder. The exporter validates supported edits and writes the edited files in the output layout required by the mod, while protecting the loaded originals. Replacing files owned by an earlier editor export does not create backups; unrelated files are refused. Keep any backups you want yourself. Existing backup files are left alone.
 
 Keep the source data, project and mod output separate. A project is the editable record of your work; an exported mod is the result you test with your own game setup. Exporting does not test gameplay, events or save compatibility.
 

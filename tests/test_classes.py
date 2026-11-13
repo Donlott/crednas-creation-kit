@@ -70,7 +70,7 @@ class ClassFormatTests(unittest.TestCase):
         self.assertTrue(person.changes)
         with self.assertRaises(DataError):load_suite_project({'Characters':person},project)
 
-    def test_suite_export_guards_backups_and_preflight(self):
+    def test_suite_export_guards_no_backups_and_preflight(self):
         person=Person(person_fixture());docs={'Characters':person,'Classes':self.job}
         with tempfile.TemporaryDirectory() as td:
             base=Path(td);sources={}
@@ -85,7 +85,8 @@ class ClassFormatTests(unittest.TestCase):
                 with self.assertRaises(DataError):export_suite(docs,sources,mod)
             self.assertEqual((mod/'romfs/GameData/Job.bin').read_bytes(),old)
             export_suite(docs,sources,mod)
-            self.assertEqual(next((mod/'romfs/GameData').glob('Job.bin.backup-*')).read_bytes(),old)
+            self.assertFalse(list((mod/'romfs/GameData').glob('Job.bin.backup-*')))
+            self.assertNotEqual((mod/'romfs/GameData/Job.bin').read_bytes(),old)
             for key,doc in docs.items():self.assertEqual(sources[key].read_bytes(),doc.raw)
             with self.assertRaises(DataError):export_suite({'Characters':person},{'Characters':sources['Characters']},mod)
             unrelated=base/'other/romfs/GameData/Job.bin';unrelated.parent.mkdir(parents=True);unrelated.write_bytes(b'keep')

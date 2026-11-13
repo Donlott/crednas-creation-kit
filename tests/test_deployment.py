@@ -70,7 +70,7 @@ class DeploymentTests(unittest.TestCase):
         self.assertFalse(any(u.record==row.pid for u in ItemIndex().uses('IID_SYNTHETIC_A|',{'deployment':d})))
         v.set(row,v.by_offset[0xe8],'SID_NEW');self.assertEqual(SkillIndex().uses('SID_NEW',{'deployment':d})[0].module,'Battle deployment')
 
-    def test_nested_export_backups_and_original_protection(self):
+    def test_nested_export_no_backups_and_original_protection(self):
         d=self.doc;v=self.view;v.set(v.records[0],v.by_offset[0x20],'PID_NEW')
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp);source=root/'romfs/GameData'/d.filename;source.parent.mkdir(parents=True);source.write_bytes(d.raw)
@@ -78,7 +78,7 @@ class DeploymentTests(unittest.TestCase):
             with self.assertRaises(DataError):export_suite(docs,sources,root)
             mod=root/'mod';export_suite(docs,sources,mod);target=mod/'romfs/GameData'/d.filename
             verify(self,d,Deployment(target.read_bytes(),d.filename));self.assertEqual(source.read_bytes(),d.raw)
-            export_suite(docs,sources,mod);self.assertEqual(len(list(target.parent.glob('*.backup-*'))),1)
+            export_suite(docs,sources,mod);self.assertEqual(len(list(target.parent.glob('*.backup-*'))),0)
             self.assertEqual(set(suite_project(docs)['documents']),{d.filename})
             loaded,_=read_editable_tables(root/'romfs/GameData');self.assertEqual(len(loaded),1)
             self.assertEqual(next(iter(loaded.values())).filename,d.filename)

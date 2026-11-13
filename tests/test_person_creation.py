@@ -108,7 +108,7 @@ class CharacterCreationTests(unittest.TestCase):
         app=SimpleNamespace(catalog={},documents=docs);self.assertIn(r.pid,reference_ids(app,'PID_'))
         d.remove_character(r.pid);self.assertNotIn(r.pid,reference_ids(app,'PID_'))
 
-    def test_exports_manifest_backups_reedit_source_guard_and_no_native_deletion(self):
+    def test_exports_manifest_no_backups_reedit_source_guard_and_no_native_deletion(self):
         d=self.d;d.create_character('PID_Export',d.records[0].pid,serial=3)
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp);source=root/'game/romfs/GameData/Person.bin';source.parent.mkdir(parents=True);source.write_bytes(d.raw)
@@ -116,7 +116,7 @@ class CharacterCreationTests(unittest.TestCase):
             result=Person(target.read_bytes());result.create_character('PID_Reedit',serial=4)
             self.assertEqual(len(Person(result.build()).records),4)
             manifest=json.loads((root/'mod/suite-edits.json').read_text());self.assertEqual(manifest['documents']['Person.bin']['format'],'fw-character-edits-v3')
-            export_suite({'Characters':d},{'Characters':source},root/'mod');self.assertEqual(len(list(target.parent.glob('*.backup-*'))),1)
+            export_suite({'Characters':d},{'Characters':source},root/'mod');self.assertEqual(len(list(target.parent.glob('*.backup-*'))),0)
             self.assertEqual(source.read_bytes(),d.raw)
             with self.assertRaises(DataError):export_suite({'Characters':d},{'Characters':source},root/'game')
 

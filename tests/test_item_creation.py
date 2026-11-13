@@ -138,7 +138,7 @@ class ItemCreationTests(unittest.TestCase):
         self.assertTrue(any(u.record==row.pid for u in SkillIndex().uses('SID_NEW',docs)))
         d.remove_item(row.pid);self.assertNotIn(row.pid,reference_ids(app,'IID_'))
 
-    def test_three_file_exports_manifests_backups_reedit_and_legacy_clear(self):
+    def test_three_file_exports_manifests_no_backups_reedit_and_legacy_clear(self):
         docs={'Items':self.doc,'Side0':ItemP0(item_fixture()),'Side1':ItemP1(item_fixture())}
         for i,d in enumerate(docs.values()):d.create_item('IID_New_'+str(i),d.records[0].pid)
         with tempfile.TemporaryDirectory() as temp:
@@ -150,7 +150,7 @@ class ItemCreationTests(unittest.TestCase):
                 target=root/'mod/romfs/GameData'/d.filename;result=type(d)(target.read_bytes())
                 result.create_item('IID_Reedit_'+key);self.assertEqual(len(type(d)(result.build()).records),len(d.records)+1)
                 self.assertEqual(sources[key].read_bytes(),d.raw)
-            export_suite(docs,sources,root/'mod');self.assertEqual(len(list((root/'mod/romfs/GameData').glob('*.backup-*'))),3)
+            export_suite(docs,sources,root/'mod');self.assertEqual(len(list((root/'mod/romfs/GameData').glob('*.backup-*'))),0)
         load_suite_project(docs,Item(self.doc.raw).project());self.assertFalse(any(d.new_items for d in docs.values()))
 
 

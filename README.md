@@ -2,7 +2,7 @@
 
 **This program cannot run or emulate games. It only edits files that you provide.**
 
-# Credna's Creation Kit 1.00
+# Credna's Creation Kit 1.01
 
 A Windows and Linux file editor for **Fortune's Weave**, supporting game version **1.00**.
 
@@ -11,7 +11,7 @@ A Windows and Linux file editor for **Fortune's Weave**, supporting game version
 - Edit characters, classes, stats, aptitudes, skills and items.
 - Create or duplicate characters, classes, items and learning lists; expand supported learning entries.
 - Browse appearance IDs and edit appearance rules, profiles and affiliations.
-- Edit supports, recruitment, facilities, rewards, shops and loot.
+- Edit supports, recruitment, Wings of Salvation percentages, facilities, rewards, shops and loot.
 - Edit battle deployment, Legion definitions, automatic progression and difficulty adjustments.
 - Edit event conditions and timelines, plus supported compiled-script constants and instructions.
 - View English/glossary previews beside stored values and follow supported reference links.

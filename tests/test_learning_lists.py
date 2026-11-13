@@ -132,7 +132,7 @@ class LearningListTests(unittest.TestCase):
         with self.assertRaises(DataError):d.create_list('LID_Full')
         self.assertFalse(d.modified)
 
-    def test_shared_exports_sources_backups_and_live_skill_references(self):
+    def test_shared_exports_sources_no_backups_and_live_skill_references(self):
         d=self.doc;d.create_list('LID_Custom');row=d.append_entry('LID_Custom');d.set(row,d.by_offset[0x28],'SID_CUSTOM')
         use=SkillIndex().uses('SID_CUSTOM',{'Learning tables':d})[0]
         self.assertEqual((use.table,use.row,use.record),('LID_Custom',0,row.pid))
@@ -143,7 +143,7 @@ class LearningListTests(unittest.TestCase):
             self.assertIn('LID_Custom',result.tables_by_id)
             manifest=json.loads((root/'mod/suite-edits.json').read_text(encoding='utf8'))
             self.assertEqual(manifest['documents']['Growth.bin']['new_lists'],['LID_Custom'])
-            export_suite({'Growth':d},{'Growth':source},root/'mod');self.assertTrue(list(target.parent.glob('Growth.bin.backup-*')))
+            export_suite({'Growth':d},{'Growth':source},root/'mod');self.assertFalse(list(target.parent.glob('Growth.bin.backup-*')))
             self.assertEqual(source.read_bytes(),d.raw)
 
 
