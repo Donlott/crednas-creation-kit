@@ -27,6 +27,8 @@ Start with [Getting started](Getting-started.md), then read [Projects and export
 
 [Compiled scripts](Scripts.md) is available through **Tools → Script editor…**. See [Translations](Translations.md) for English previews and the local glossary, and [Maintainers](Maintainers.md) for build and release instructions.
 
+[Forced tutorials](Forced-tutorials.md) provides experimental, individually selectable bypasses through **Tools → Forced tutorials…**.
+
 ## Read labels literally
 
 The editor exposes stored values and supported links. Fields marked **raw**, unknown categories and unnamed stat blocks are not fully interpreted. A reference list shows observed stored references, not a simulation of runtime behavior. Structural file validation does not replace in-game testing.

@@ -15,6 +15,7 @@ A Windows and Linux file editor for **Fortune's Weave**, supporting game version
 - Add or duplicate inventory entries in existing shops, including newly created items.
 - Edit battle deployment, Legion definitions, automatic progression and difficulty adjustments.
 - Edit event conditions and timelines, plus supported compiled-script constants and instructions.
+- Browse forced tutorial sequences, inspect progression dependencies and test supported guidance bypasses.
 - View English/glossary previews beside stored values and follow supported reference links.
 - Save projects, reopen your last project and export edits to a separate mod folder.
 

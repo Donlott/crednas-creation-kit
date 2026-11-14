@@ -38,7 +38,7 @@ class ScriptDocument:
         from fw_editor import decompress, Field, Record
         self.filename=filename;self.raw=bytes(raw);self.sha256=hashlib.sha256(self.raw).hexdigest()
         self.module=Module(decompress(raw) if filename.endswith('.zst') else raw)
-        self.strings={};self.instructions={}
+        self.strings={};self.instructions={};self.tutorial_programs=set()
         self.fields=(Field('Runtime string constant','string',8,0x20),)
         self.by_offset={0x20:self.fields[0]}
         self.records=tuple(Record(f'SCRIPT_STRING_{i}',token.start,i) for i,token in enumerate(self.module.constants))
@@ -48,14 +48,15 @@ class ScriptDocument:
         return self.strings.get(record.index,self.module.constants[record.index].text)
 
     @property
-    def modified(self):return bool(self.strings or self.instructions)
+    def modified(self):return bool(self.strings or self.instructions or self.tutorial_programs)
 
     @property
-    def changes(self):return {**{('string',i):v for i,v in self.strings.items()},**{('instruction',*k):v for k,v in self.instructions.items()}}
+    def changes(self):return {**{('string',i):v for i,v in self.strings.items()},**{('instruction',*k):v for k,v in self.instructions.items()},**{('tutorial',k):True for k in self.tutorial_programs}}
 
-    def clear_edits(self):self.strings={};self.instructions={}
-    def snapshot_edits(self):return deepcopy((self.strings,self.instructions))
-    def restore_edits(self,state):self.strings,self.instructions=deepcopy(state)
+    def clear_edits(self):self.strings={};self.instructions={};self.tutorial_programs=set()
+    def snapshot_edits(self):return deepcopy((self.strings,self.instructions,self.tutorial_programs))
+    def restore_edits(self,state):
+        self.strings,self.instructions=deepcopy(state[:2]);self.tutorial_programs=deepcopy(state[2]) if len(state)>2 else set()
 
     def set_string(self,index,value):
         if type(index) is not int or not 0<=index<len(self.module.constants):raise ScriptError('Unknown string constant.')
@@ -76,6 +77,10 @@ class ScriptDocument:
 
     def build_raw(self):
         if not self.modified:return self.module.raw
+        if self.tutorial_programs:
+            from tutorial_data import programs_for_document
+            programs,constants=programs_for_document(self)
+            return self.module.rebuild(self.strings,self.instructions,reviewed_programs=programs,extra_constants=constants)
         return self.module.rebuild(self.strings,self.instructions)
 
     def build(self):
@@ -84,12 +89,14 @@ class ScriptDocument:
         return compress(raw) if self.filename.endswith('.zst') else raw
 
     def project(self):
-        return {'format':'fw-script-edits-v1','source_file':self.filename,'source_sha256':self.sha256,
+        project={'format':'fw-script-edits-v1','source_file':self.filename,'source_sha256':self.sha256,
                 'strings':[{'index':i,'value':v} for i,v in sorted(self.strings.items())],
                 'instructions':[{'function':fi,'instruction':ii,'opcode':op,'arguments':list(args)} for (fi,ii),(op,args) in sorted(self.instructions.items())]}
+        if self.tutorial_programs:project.update(format='fw-script-edits-v2',tutorial_programs=sorted(self.tutorial_programs))
+        return project
 
     def load_project(self,project):
-        if not isinstance(project,dict) or project.get('format')!='fw-script-edits-v1' or project.get('source_file')!=self.filename or project.get('source_sha256')!=self.sha256:raise ScriptError('Script project does not match the original source file.')
+        if not isinstance(project,dict) or project.get('format') not in ('fw-script-edits-v1','fw-script-edits-v2') or project.get('source_file')!=self.filename or project.get('source_sha256')!=self.sha256:raise ScriptError('Script project does not match the original source file.')
         fresh=ScriptDocument(self.raw,self.filename);seen=set()
         for item in project.get('strings',[]):
             index=item['index']
@@ -100,6 +107,11 @@ class ScriptDocument:
             key=item['function'],item['instruction']
             if key in seen:raise ScriptError('Duplicate instruction edit.')
             seen.add(key);fresh.set_instruction(*key,item['opcode'],item['arguments'])
+        if project.get('format')=='fw-script-edits-v2':
+            keys=project.get('tutorial_programs')
+            if not isinstance(keys,list) or any(not isinstance(k,str) for k in keys) or len(set(keys))!=len(keys):raise ScriptError('Invalid tutorial program list.')
+            fresh.tutorial_programs=set(keys)
+        elif project.get('tutorial_programs'):raise ScriptError('Tutorial programs require a v2 script project.')
         fresh.build_raw() # Validate the entire round trip before committing.
         self.restore_edits(fresh.snapshot_edits())
 

@@ -1004,6 +1004,8 @@ def load_suite_project(documents, project):
 
 
 def export_suite(documents, sources, directory):
+    from tutorial_data import validate_export
+    validate_export(documents)
     validate_new_item_ids(documents)
     directory = Path(directory)
     manifest = directory/'suite-edits.json'
@@ -1276,6 +1278,7 @@ def main():
             tools_menu = tk.Menu(menu, tearoff=False)
             tools_menu.add_command(label='Translation glossary…', command=self.glossary)
             tools_menu.add_command(label='Script editor…', command=lambda:__import__('script_ui').open_editor(self))
+            tools_menu.add_command(label='Forced tutorials…', command=lambda:__import__('tutorial_ui').open_editor(self))
             menu.add_cascade(label='Tools', menu=tools_menu)
             self.configure(menu=menu)
             top = ttk.Frame(self, padding=(8, 6)); top.pack(fill='x')

@@ -16,4 +16,6 @@ The **Compiled scripts** tab inspects script metadata from your selected data. U
 
 Event tables and compiled scripts serve different roles. Neither module is a game emulator, story simulator or full dialogue-text editor.
 
+For the supported compulsory gameplay lessons, use **Tools → Forced tutorials…**. See [Forced tutorials](Forced-tutorials.md) for scope and testing limits.
+
 [Guide home](Home.md)
