@@ -105,6 +105,7 @@ class Function:
 class ReviewedProgram:
     instructions:tuple
     variable_space:int=0
+    string_slots:tuple=()
 
 
 class Module:
@@ -115,7 +116,7 @@ class Module:
         self.saved_strings=[];self.types=[];self.signatures=[]
         self.string_tokens=[];self.functions=[];self.constants=[]
         self.bindings=[];self.used_functions=[];self.globals=[]
-        self.function_layouts={};self.constants_span=None
+        self.function_layouts={};self.function_storage={};self.used_type_infos=[];self.constants_span=None
         try:
             self._read_module()
             self.validate_references()
@@ -228,14 +229,15 @@ class Module:
                     instructions.append(Instruction(at,self.at,opcode,arguments))
                 fi=len(self.functions)
                 self.functions.append(Function(sig,start,self.at,tuple(instructions)))
-                self.count() # Stack variable space
+                space=self.count();objects=[];heap=0;lifetimes=[];catches=[]
                 if flags&8:
                     count=self.count()
-                    for _ in range(count):self.type_info();self.integer()
-                    if count:self.count(10000)
-                    for _ in range(self.count()):self.count();self.integer();self.count(4)
+                    for _ in range(count):objects.append((self.type_info(),self.integer()))
+                    if count:heap=self.count(10000)
+                    for _ in range(self.count()):lifetimes.append((self.count(),self.integer(),self.count(4)))
                 if flags&16:
-                    for _ in range(self.count()):self.count();self.count()
+                    for _ in range(self.count()):catches.append((self.count(),self.count()))
+                self.function_storage[fi]=(space,tuple(objects),heap,tuple(lifetimes),tuple(catches))
                 self.function_layouts[fi]=(flags_at,self.at,flags)
         elif sig.kind in (2,3):self.count()
         elif sig.kind==4:self.byte()
@@ -281,7 +283,7 @@ class Module:
         for _ in range(self.count()):self.function()
         for _ in range(self.count()):self.function() # Public function references
         for _ in range(self.count()):self.bindings.append((self.function(),self.string()))
-        for _ in range(self.count()):self.type_info()
+        for _ in range(self.count()):self.used_type_infos.append(self.type_info())
         for _ in range(self.count()):self.data_type()
         for _ in range(self.count()):self.used_functions.append(None if self.byte()==ord('n') else self.signature())
         for _ in range(self.count()):self.globals.append((self.string(),self.string(),self.data_type(),self.byte()))
@@ -305,6 +307,10 @@ class Module:
                 if ins.name in CALLS:
                     table=self.bindings if ins.name=='CALLBND' else self.used_functions
                     if not 0<=ins.arguments[0]<len(table):self.fail('Call reference is outside its table')
+                if ins.name=='ALLOC':
+                    type_index,constructor=ins.arguments
+                    if not 0<=type_index<len(self.used_type_infos) or not 0<=constructor<=len(self.used_functions):
+                        self.fail('Object allocation reference is outside its table')
                 if ins.name in ('PGA','PshGPtr'):
                     value=ins.arguments[0]
                     table=self.globals if value&1 else self.constants
@@ -351,10 +357,17 @@ class Module:
     def rebuild(self,strings,instructions,*,reviewed_programs=None,extra_constants=()):
         """Reindex parsed tokens and source-guarded reviewed programs; preserve other content."""
         replacements=[];cache={};programs=reviewed_programs or {}
-        spans=[]
+        spans=[];metadata_tokens=[];storage={}
+        def serialize_string(value):
+            data=value.encode('utf8')
+            if len(data)*2>MAX_COUNT:raise ScriptError('String exceeds the supported serialized size.')
+            if not data:return b'\0'
+            if value in cache:return encoded(cache[value]*2+1)
+            cache[value]=len(cache);return encoded(len(data)*2)+data
         for fi,program in programs.items():
             code=program.instructions if isinstance(program,ReviewedProgram) else program
             variable_space=program.variable_space if isinstance(program,ReviewedProgram) else 0
+            slots=program.string_slots if isinstance(program,ReviewedProgram) else ()
             function=self.functions[fi];start,end,flags=self.function_layouts[fi]
             sig=function.signature
             read_guard=(sig.name=='IsAlreadyRead' and sig.result==(65,None,0)
@@ -362,27 +375,29 @@ class Module:
             if sig.object_type or sig.templates or sig.namespace or sig.kind!=1:
                 raise ScriptError('Unsupported reviewed function signature.')
             if read_guard:
-                if variable_space!=4:raise ScriptError('Read compatibility guards require one result slot.')
-            elif sig.parameters or sig.result!=(80,None,0) or variable_space:
-                raise ScriptError('Reviewed completion programs require a void function without parameters or locals.')
+                if variable_space!=4 or slots:raise ScriptError('Read compatibility guards require one result slot.')
+            elif sig.parameters or sig.result!=(80,None,0) or (variable_space,slots) not in ((0,()),(4,(4,))):
+                raise ScriptError('Reviewed completion programs allow only one owned-string temporary.')
             if any(key[0]==fi for key in instructions):raise ScriptError('A tutorial program conflicts with custom instruction edits.')
-            # These programs use no local objects. Remove the old
-            # lifetime/catch metadata instead of leaving stale cleanup positions.
+            # Replace obsolete cleanup metadata. An owned-string temporary has
+            # one zero-initialized heap slot, transferred and cleared by GETOBJ.
             allowed={'SUSPEND','PshC4','PGA','CALLSYS','RET','JLowZ','JLowNZ','JMP'}
             if read_guard:allowed|={'PshVPtr','CpyRtoV4','CpyVtoR4','FREE'}
+            if slots:allowed|={'PSF','ALLOC','VAR','GETOBJ','CALLBND'}
             valid=lambda op,args:(type(op) is int and 0<=op<201 and OPCODES[op][0] in allowed
                                   and isinstance(args,tuple) and all(type(x) is int for x in args)
                                   and len(args)==ARG_COUNTS[OPCODES[op][1]])
             if not code or len(code)>(16384 if read_guard else 512) or any(not valid(op,args) for op,args in code) or code[-1]!=(next(i for i,(n,_) in enumerate(OPCODES) if n=='RET'),(0,)):
                 raise ScriptError('Unsupported reviewed tutorial program.')
-            output=bytes([flags&~24])+encoded(len(code))+b''.join(bytes([op])+b''.join(encoded(x) for x in args) for op,args in code)+encoded(variable_space)
-            replacements.append((start,end,output));spans.append((start,end))
-        def serialize_string(value):
-            data=value.encode('utf8')
-            if len(data)*2>MAX_COUNT:raise ScriptError('String exceeds the supported serialized size.')
-            if not data:return b'\0'
-            if value in cache:return encoded(cache[value]*2+1)
-            cache[value]=len(cache);return encoded(len(data)*2)+data
+            output=bytes([(flags&~24)|(8 if slots else 0)])+encoded(len(code))+b''.join(bytes([op])+b''.join(encoded(x) for x in args) for op,args in code)+encoded(variable_space)
+            if slots:
+                metadata_tokens.append((start,('string','')))
+                def with_slot(output=output):
+                    return output+encoded(1)+b'o'+serialize_string('string')+serialize_string('')+encoded(4)+encoded(1)+encoded(0)
+                value=with_slot
+            else:value=output
+            storage[fi]=(variable_space,((('string',''),4),) if slots else (),len(slots),(),())
+            replacements.append((start,end,value));spans.append((start,end))
         constant_positions={token.start:index for index,token in enumerate(self.constants)}
         for token in self.string_tokens:
             if any(start<=token.start<end for start,end in spans):continue
@@ -403,13 +418,10 @@ class Module:
         data.extend(self.raw[at:]);struct.pack_into('<I',data,8,len(data)-self.info.payload_offset)
         rebuilt=Module(data)
         # Check semantic round-trip, including metadata strings that share the cache.
-        expected=[strings.get(constant_positions.get(t.start),t.text) for t in self.string_tokens if not any(start<=t.start<end for start,end in spans)]
-        # Appended constants occur before the final type-property section, which
-        # may itself contain metadata strings; compare constants separately.
-        if extra_constants:
-            old_end=self.constants_span[2]
-            before=sum(1 for t in self.string_tokens if t.start<old_end and not any(start<=t.start<end for start,end in spans))
-            expected[before:before]=list(extra_constants)
+        token_events=[(t.start,1,(strings.get(constant_positions.get(t.start),t.text),)) for t in self.string_tokens if not any(start<=t.start<end for start,end in spans)]
+        token_events.extend((position,0,values) for position,values in metadata_tokens)
+        if extra_constants:token_events.append((self.constants_span[2],0,extra_constants))
+        expected=[value for _,_,values in sorted(token_events) for value in values]
         if [t.text for t in rebuilt.string_tokens]!=expected:raise ScriptError('String cache round-trip mismatch.')
         if len(rebuilt.functions)!=len(self.functions):raise ScriptError('Function count changed.')
         for fi,(old,new) in enumerate(zip(self.functions,rebuilt.functions)):
@@ -417,7 +429,8 @@ class Module:
             expected=list(program.instructions if isinstance(program,ReviewedProgram) else program) if fi in programs else [instructions.get((fi,ii),(ins.opcode,ins.arguments)) for ii,ins in enumerate(old.instructions)]
             actual=[(ins.opcode,ins.arguments) for ins in new.instructions]
             if actual!=expected:raise ScriptError('Instruction round-trip mismatch.')
+            if rebuilt.function_storage[fi]!=storage.get(fi,self.function_storage[fi]):raise ScriptError('Function storage round-trip mismatch.')
         if (rebuilt.types!=self.types or rebuilt.signatures!=self.signatures or rebuilt.bindings!=self.bindings
-                or rebuilt.used_functions!=self.used_functions or rebuilt.globals!=self.globals):
+                or rebuilt.used_functions!=self.used_functions or rebuilt.used_type_infos!=self.used_type_infos or rebuilt.globals!=self.globals):
             raise ScriptError('Reviewed rewrite changed module type or call tables.')
         return bytes(data)

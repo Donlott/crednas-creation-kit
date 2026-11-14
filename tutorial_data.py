@@ -33,6 +33,7 @@ class Preset:
     read_stages:tuple=()
     advance:bool=True
     native_calls:tuple=()
+    entry_args:tuple=()
 
 
 PRESETS=tuple(Preset(**p) for p in CATALOG)
@@ -85,14 +86,15 @@ def legacy_values(preset):
 
 
 def table_state(documents,preset):
-    legacy=False
+    legacy=False;hooked=False
     for _,view,row in targets(documents,preset):
         current={off:view.value(row,view.by_offset[off]) for off in CONTROLLED}
         original={off:view.original(row,view.by_offset[off]) for off in CONTROLLED}
         if current==original:continue
+        if preset.entry_args and current=={**original,0x28:list(preset.entry_args)}:hooked=True;continue
         if preset.key in LEGACY and current==legacy_values(preset):legacy=True
         else:raise TutorialError('The tutorial timeline row has custom action/interval edits. Resolve them in Events first.')
-    return 'legacy' if legacy else 'normal'
+    return 'legacy' if legacy else 'hooked' if hooked else 'normal'
 
 
 def checked_functions(doc,filename,sha,labels):
@@ -130,9 +132,10 @@ def inspect_state(documents,preset):
         if bridge:bridge_targets(bridge)
         if state=='legacy':return 'legacy','Old event-type replacement: Apply to migrate it, or turn it off to restore the native event.'
         if preset.key in doc.tutorial_programs:
-            if bridge and BRIDGE_PREFIX+preset.key not in bridge.tutorial_programs:
-                return 'repair','Apply to finish installing persistent facility-access checks.'
+            if (preset.entry_args and state!='hooked') or (bridge and BRIDGE_PREFIX+preset.key not in bridge.tutorial_programs):
+                return 'repair','Apply to complete this bypass and its persistent access checks.'
             return 'disabled','Guidance bypass enabled. Native scheduling retained; skipped introduction markers preserve facility access.'
+        if state=='hooked':return 'repair','Apply on to install the missing completion recipe, or off to restore its native entry arguments.'
         return 'normal','Original sequence. The reviewed completion recipe is available for testing.'
     except (ValueError,AttributeError) as exc:return 'unavailable',str(exc)
 
@@ -175,7 +178,7 @@ class Assembly:
 def programs_for_document(doc):
     """Compile registered, source-pinned effects and persistent read compatibility."""
     from script_bytecode import ScriptError,ReviewedProgram
-    programs={};extra=[];m=doc.module
+    programs={};extra=[];m=doc.module;owned_programs=set()
     string=(5,('string',''),12);boolean=(65,None,0);void=(80,None,0)
     def constant(value):
         if value not in extra:extra.append(value)
@@ -186,10 +189,30 @@ def programs_for_document(doc):
                and s.object_type==receiver and not s.templates and s.traits==traits]
         if len(found)!=1:raise ScriptError('Required native API is missing or has a different signature: '+name)
         return found[0]
+    def owned_call(a,name,text,tail=(),result=void):
+        parameters=((5,('string',''),0),)+tuple((68,None,0) for value in tail)
+        found=[i for i,(s,source) in enumerate(m.bindings) if s and s.kind==5 and s.name==name and s.result==result
+               and s.parameters==parameters and s.inout==(0,)*len(parameters) and not s.object_type and not s.namespace and not s.traits and not s.templates]
+        if len(found)!=1:raise ScriptError('Required reviewed import is missing or differs: '+name)
+        types=[i for i,t in enumerate(m.used_type_infos) if t==('string','')]
+        if len(types)!=1:raise ScriptError('Required owned-string type is missing or ambiguous.')
+        constructor=api('string::$beh0(string&)',(string,),(1,),void,('string',''))
+        for value in reversed(tail):a.emit('PshC4',value)
+        # ALLOC reserves reference zero for an absent constructor.
+        a.emit('PSF',4);a.emit('PGA',constant(text));a.emit('ALLOC',types[0],constructor+1)
+        a.emit('VAR',4);a.emit('GETOBJ',0);a.emit('CALLBND',found[0]);owned_programs.add(a)
     def set_flag(a,flag,value):
-        a.emit('PshC4',int(value));a.emit('PGA',constant(flag))
-        a.emit('CALLSYS',api('hub::EntryFlag(string&, bool)',(string,boolean),(3,0)))
+        if any(s and s.label=='hub::EntryFlag(string&, bool)' for s in m.used_functions):
+            a.emit('PshC4',int(value));a.emit('PGA',constant(flag))
+            a.emit('CALLSYS',api('hub::EntryFlag(string&, bool)',(string,boolean),(3,0)))
+        elif value:owned_call(a,'FlagOn',flag)
+        else:raise ScriptError('The native flag-clearing API is unavailable.')
         a.emit('SUSPEND')
+    def first_only(a,flag,done):
+        if any(s and s.name=='TryFirstFlag' for s,source in m.bindings):
+            owned_call(a,'TryFirstFlag',flag,result=boolean);a.emit('JLowZ',done)
+        else:
+            owned_call(a,'IsFlagOn',flag,result=boolean);a.emit('JLowNZ',done);owned_call(a,'FlagOn',flag)
     bridges=[]
     for key in sorted(doc.tutorial_programs):
         internal=key.startswith(BRIDGE_PREFIX);public=key[len(BRIDGE_PREFIX):] if internal else key
@@ -203,6 +226,19 @@ def programs_for_document(doc):
             a=Assembly();a.emit('SUSPEND');hook=m.functions[fi].signature.name
             for n,(call_hook,guard,kind,value) in enumerate(preset.native_calls):
                 if call_hook!=hook:continue
+                if kind in ('item','single-item','equip'):
+                    first_only(a,guard,'reward_done_'+str(n))
+                    if kind=='item':
+                        item,count=value;owned_call(a,'RunItemGainCount',item,(count,))
+                    elif kind=='single-item':owned_call(a,'RunItemGain',value)
+                    else:
+                        person,item=value;a.emit('PGA',constant(item));a.emit('PGA',constant(person))
+                        a.emit('CALLSYS',api('hub::unique::HasUnitItem(string&, string&)',(string,string),(3,3),boolean))
+                        a.emit('JLowNZ','reward_done_'+str(n))
+                        a.emit('PGA',constant(item));a.emit('PGA',constant(person))
+                        a.emit('CALLSYS',api('hub::unique::ForceEquipItem(string&, string&)',(string,string),(3,3),boolean))
+                    a.emit('SUSPEND')
+                    a.label('reward_done_'+str(n));continue
                 a.emit('PGA',constant(guard));a.emit('CALLSYS',api('hub::IsActiveFlag(string&)',(string,),(3,),boolean))
                 a.emit('JLowNZ','reward_done_'+str(n));set_flag(a,guard,True)
                 if kind=='gold':
@@ -219,7 +255,8 @@ def programs_for_document(doc):
                 set_flag(a,marker(preset.key+'_stage'+str(stage+1)),True)
             elif preset.read_keys:set_flag(a,marker(preset.key),True)
             if preset.advance:a.emit('CALLSYS',api('hub::ReserveJumpNextTimeline()'));a.emit('SUSPEND')
-            a.emit('RET',0);programs[fi]=a.finish()
+            a.emit('RET',0);code=a.finish()
+            programs[fi]=ReviewedProgram(code,4,(4,)) if a in owned_programs else code
     if bridges:
         equals=api('string::opEquals(string&)',(string,),(1,),boolean,('string',''),1)
         active=api('hub::IsActiveFlag(string&)',(string,),(3,),boolean)
@@ -259,6 +296,7 @@ def apply_choices(documents,choices):
             for _,view,row in refs:
                 if state=='legacy':
                     for off in CONTROLLED:view.set(row,view.by_offset[off],view.original(row,view.by_offset[off]))
+                if preset.entry_args:view.set(row,view.by_offset[0x28],list(preset.entry_args) if disabled else view.original(row,view.by_offset[0x28]))
             if disabled:
                 doc.tutorial_programs.add(preset.key)
                 if bridge:bridge.tutorial_programs.add(BRIDGE_PREFIX+preset.key)
@@ -283,7 +321,9 @@ def validate_export(documents):
         if script and preset.key in getattr(script,'tutorial_programs',()):
             # Active recipes must include their unchanged, reviewed native rows.
             state=table_state(documents,preset)
-            if state!='normal':raise TutorialError('An active tutorial recipe conflicts with its timeline: '+preset.title)
+            if state!=('hooked' if preset.entry_args else 'normal'):raise TutorialError('An active tutorial recipe conflicts with its timeline: '+preset.title)
             if preset.read_keys:
                 bridge=document(documents,BRIDGE_SOURCE);bridge_targets(bridge)
                 if BRIDGE_PREFIX+preset.key not in bridge.tutorial_programs:raise TutorialError('A tutorial recipe is missing persistent facility-access checks: '+preset.title)
+        elif preset.entry_args and all(any(d.filename==ref[0] for d in documents.values()) for ref in preset.rows):
+            if table_state(documents,preset)=='hooked':raise TutorialError('A tutorial entry hook is missing its completion recipe: '+preset.title)

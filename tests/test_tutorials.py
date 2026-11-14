@@ -10,6 +10,36 @@ from test_events import event_fixture
 import tutorial_data as td
 
 
+# Tiny programs compiled from our own test scripts with AngelScript 2.35.1.
+# Imports are synthetic Header helpers; these bytes contain no game data.
+OWNED_FIXTURES=(
+    bytes.fromhex(
+        '01000000000002660a496e74726f004050000001000008253f8e0101030162003d003f62003d013f0403620004023d02'
+        '040240000304023d03640344003e003f02010403620004023d02040240000304023d03640344003e013f3d043f0a0003'
+        '026f0c737472696e6700036f03000201040d02011102001a02011e02006612556e72656c61746564010001000000073f'
+        '8e0101030162023d003f0a000102720072010266185472794669727374466c6167004041000100056f03000000050000'
+        '000c486561646572662052756e4974656d4761696e436f756e7401020300404400000500000009016f03000005611245'
+        '6e747279466c6167010200056f03000c0201030000000668756261184973416374697665466c61670201050103000000'
+        '0f610a2462656830010105010100006f030000610a24626568320100006f030000612e526573657276654a756d704e65'
+        '787454696d656c696e65010000000f0002087365656412756e72656c6174656400'
+    ),
+    bytes.fromhex(
+        '01000000000002660a496e74726f004050000001000008293f0402620004013d00040140000104013d01640244003e01'
+        '3f0402620004013d00040140000104013d01640244003e003f02010402620004013d00040140000104013d0164024400'
+        '3e023f3d023f0a0003026f0c737472696e6700026f03000101060501010901001101011501001e01012201006612556e'
+        '72656c617465640100010000080e3f0402620204013d00040140000104013d01640244003e013f0a0002026f0300026f'
+        '030001010205010109010002720072010366104973466c61674f6e004041000100056f03000000050000000c48656164'
+        '6572660c466c61674f6e010103000500000009662052756e4974656d4761696e436f756e740102030040440000050000'
+        '0009016f03000003610a2462656830010100056f03000c010100006f030000610a24626568320100006f030000612e52'
+        '6573657276654a756d704e65787454696d656c696e6501000000066875620002087365656412756e72656c6174656400'
+    ),
+)
+
+def wrap_payload(payload):
+    header=bytearray(0x2010);header[:4]=b"ASF\0";struct.pack_into("<III",header,4,len(header),len(payload),0)
+    return bytes(header)+payload
+
+
 def script_fixture():
     s=lambda text:encoded(len(text.encode())*2)+text.encode()
     def op(name,*args):return bytes([next(i for i,(n,_) in enumerate(OPCODES) if n==name)])+b''.join(encoded(x) for x in args)
@@ -35,9 +65,9 @@ def fixture():
     return {'Events':d,'Script':script},p
 
 
-def execute_program(test,module,fi,args=(),flags=None,reads=()):
+def execute_program(test,module,fi,args=(),flags=None,reads=(),unit_items=()):
     """Bounded opcode interpreter for stack/branch/native-call contracts only."""
-    stack=[];flags={} if flags is None else flags;advances=0;grants=[];freed=[];locals_={};result=None;pc=0;steps=0
+    stack=[];flags={} if flags is None else flags;advances=0;grants=[];freed=[];locals_={};result=None;pc=0;steps=0;objects={};live=set();allocated=0;equips=[]
     code=module.functions[fi].instructions
     while pc<len(code):
         steps+=1;test.assertLess(steps,50000);ins=code[pc];pc+=1
@@ -45,6 +75,25 @@ def execute_program(test,module,fi,args=(),flags=None,reads=()):
         if ins.name=='PshC4':stack.append(ins.arguments[0])
         elif ins.name=='PGA':
             test.assertEqual(ins.arguments[0]&1,0);stack.append(module.constants[ins.arguments[0]>>1].text)
+        elif ins.name=='PSF':stack.append(('address',ins.arguments[0]))
+        elif ins.name=='VAR':stack.append(('slot',ins.arguments[0]))
+        elif ins.name=='ALLOC':
+            type_index,constructor=ins.arguments
+            test.assertEqual(module.used_type_infos[type_index],('string',''))
+            test.assertEqual(module.used_functions[constructor-1].label,'string::$beh0(string&)')
+            text=stack.pop();address=stack.pop();test.assertEqual(address,('address',4));test.assertIsInstance(text,str)
+            test.assertFalse(objects.get(4));allocated+=1;live.add(allocated);objects[4]=('owned',allocated,text)
+        elif ins.name=='GETOBJ':
+            test.assertEqual(ins.arguments,(0,));test.assertEqual(stack[-1],('slot',4));stack[-1]=objects.pop(4)
+        elif ins.name=='CALLBND':
+            sig=module.bindings[ins.arguments[0]][0];obj=stack.pop()
+            test.assertEqual(obj[0],'owned');test.assertIn(obj[1],live);live.remove(obj[1]);text=obj[2]
+            if sig.name=='TryFirstFlag':result=not flags.get(text,False);flags[text]=True
+            elif sig.name=='IsFlagOn':result=flags.get(text,False)
+            elif sig.name=='FlagOn':flags[text]=True
+            elif sig.name=='RunItemGainCount':grants.append(('item',(text,stack.pop())))
+            elif sig.name=='RunItemGain':grants.append(('item',(text,None)))
+            else:test.fail('Unexpected reviewed import: '+sig.label)
         elif ins.name=='PshVPtr':stack.append(args[-ins.arguments[0]])
         elif ins.name=='CpyRtoV4':locals_[ins.arguments[0]]=result
         elif ins.name=='CpyVtoR4':result=locals_[ins.arguments[0]]
@@ -61,13 +110,17 @@ def execute_program(test,module,fi,args=(),flags=None,reads=()):
             elif label=='hub::IsAlreadyRead(string&)':result=stack.pop() in reads
             elif label=='string::opEquals(string&)':result=stack.pop()==stack.pop()
             elif label=='hub::ReserveJumpNextTimeline()':test.assertFalse(stack);advances+=1
+            elif label=='hub::unique::HasUnitItem(string&, string&)':
+                person=stack.pop();item=stack.pop();result=(person,item) in unit_items
+            elif label=='hub::unique::ForceEquipItem(string&, string&)':
+                person=stack.pop();item=stack.pop();equips.append((person,item));result=True
             elif label=='hub::ui::GainGoldFund(int)':grants.append(('gold',stack.pop()))
             elif label=='hub::ui::RunRecruitResult(string&)':grants.append(('battalion',stack.pop()))
             else:test.fail('Unexpected reviewed native call: '+label)
         else:
             test.assertEqual((ins.name,ins.arguments),('RET',(0,)));test.assertFalse(stack);test.assertEqual(pc,len(code))
-    test.assertFalse(stack);test.assertEqual(freed,list(range(len(args))))
-    return dict(flags=flags,advances=advances,grants=grants,result=result)
+    test.assertFalse(stack);test.assertFalse(live);test.assertFalse(objects);test.assertEqual(freed,list(range(len(args))))
+    return dict(flags=flags,advances=advances,grants=grants,result=result,equips=equips)
 
 
 def run_program(test,module,fi):
@@ -76,6 +129,24 @@ def run_program(test,module,fi):
 
 
 class TutorialTests(unittest.TestCase):
+    def test_owned_string_imports_flags_and_one_time_grants_without_game_data(self):
+        for payload in OWNED_FIXTURES:
+            d=ScriptDocument(compress(wrap_payload(payload)),'Script/hub/Synthetic.bin.zst')
+            p=replace(td.BY_KEY['cai-trading'],key='synthetic-owned',script=d.filename,script_sha=d.sha256,rows=(),hook='Intro',
+                      flags=('UNLOCKED',),read_keys=('dummy',),native_calls=(('Intro','reward-once','item',('permit',1)),))
+            with patch.dict(td.BY_KEY,{p.key:p}):
+                d.tutorial_programs.add(p.key);m=Module(d.build_raw());fi=td.script_target(d,p)
+                effect=execute_program(self,m,fi);self.assertEqual(effect['grants'],[('item',('permit',1))])
+                self.assertTrue(effect['flags']['UNLOCKED']);self.assertTrue(effect['flags'][td.marker(p.key)])
+                self.assertFalse(execute_program(self,m,fi,flags=effect['flags'])['grants'])
+                self.assertEqual(m.function_storage[fi],(4,((('string',''),4),),1,(),()))
+                programs,constants=td.programs_for_document(d)
+                bad={fi:replace(programs[fi],variable_space=8,string_slots=(8,))}
+                with self.assertRaises(ScriptError):d.module.rebuild({}, {},reviewed_programs=bad,extra_constants=constants)
+                fresh=ScriptDocument(d.raw,d.filename);fresh.load_project(json.loads(json.dumps(d.project())))
+                self.assertEqual(fresh.build(),d.build())
+                d.tutorial_programs.clear();self.assertEqual(d.build(),d.raw)
+
     def test_timeline_bytes_unchanged_and_emitted_flags_stack_and_metadata(self):
         docs,p=fixture();table=docs['Events'];script=docs['Script'];v=table.views['timeline'];r=v.records[0]
         v.set(r,v.by_offset[0x5e],1850);v.set(r,v.by_offset[0x38],[['CUSTOM_CONDITION']]);before=table.build()
@@ -169,11 +240,19 @@ class NativeTutorialTests(unittest.TestCase):
 
     def test_all_reviewed_recipes_preserve_native_timeline_bytes_and_unrelated_functions(self):
         docs,sources=self.docs();ready=[p for p in td.PRESETS if not p.blocked]
-        self.assertEqual(len(ready),20)
+        self.assertEqual(len(ready),25)
         original={k:d.raw for k,d in docs.items()}
         td.apply_choices(docs,{p.key:True for p in ready});td.validate_export(docs)
         for key,d in docs.items():
-            if isinstance(d,EventData):self.assertEqual(d.build(),original[key]);continue
+            if isinstance(d,EventData):
+                snapshot=d.snapshot_edits()
+                for p in ready:
+                    if not p.entry_args:continue
+                    for owner,v,r in td.targets(docs,p):
+                        if owner is not d:continue
+                        self.assertEqual(v.value(r,v.by_offset[0x28]),list(p.entry_args))
+                        v.set(r,v.by_offset[0x28],v.original(r,v.by_offset[0x28]))
+                self.assertEqual(d.build(),original[key]);d.restore_edits(snapshot);continue
             rebuilt=Module(d.build_raw())
             changed=set(td.bridge_targets(d)) if d.filename==td.BRIDGE_SOURCE else {fi for p in ready if p.script==d.filename for fi in td.script_targets(d,p)}
             for fi,(a,b) in enumerate(zip(d.module.functions,rebuilt.functions)):
@@ -184,13 +263,13 @@ class NativeTutorialTests(unittest.TestCase):
                     for flag in p.flags:self.assertTrue(effect['flags'][flag])
                     for flag in p.off_flags:self.assertFalse(effect['flags'][flag])
                     self.assertEqual(effect['advances'],int(p.advance))
-                    self.assertEqual(rebuilt.function_layouts[fi][2]&24,0)
+                    self.assertEqual(rebuilt.function_layouts[fi][2]&24,8 if rebuilt.function_storage[fi][1] else 0)
             self.assertEqual([t.text for t in rebuilt.constants[:len(d.module.constants)]],[t.text for t in d.module.constants])
         project=suite_project(docs);fresh,_=self.docs();load_suite_project(fresh,json.loads(json.dumps(project)))
         self.assertEqual(suite_project(fresh),project)
         td.apply_choices(docs,{p.key:False for p in ready});td.validate_export(docs)
         for key,d in docs.items():
-            if d.filename==td.BRIDGE_SOURCE:self.assertTrue(d.modified);self.assertEqual(len(d.tutorial_programs),20)
+            if d.filename==td.BRIDGE_SOURCE:self.assertTrue(d.modified);self.assertEqual(len(d.tutorial_programs),25)
             else:self.assertEqual(d.build(),original[key])
         # Re-exporting restores old scene files and keeps access guards; no stale bypass payloads.
         with tempfile.TemporaryDirectory() as temp:
@@ -236,7 +315,7 @@ class NativeTutorialTests(unittest.TestCase):
     def test_city_stages_do_not_complete_later_inn_or_story_conversation_early(self):
         docs,_=self.docs();p=td.BY_KEY['cai-city'];td.apply_choices(docs,{p.key:True})
         d=td.document(docs,p.script);m=Module(d.build_raw());first,inn=td.script_targets(d,p)
-        state=execute_program(self,m,first);self.assertEqual(state['grants'],[('gold',1500)]);self.assertEqual(state['advances'],1)
+        state=execute_program(self,m,first);self.assertTrue(state['flags']['機能開放_案内板']);self.assertEqual(state['grants'],[('gold',1500)]);self.assertEqual(state['advances'],1)
         self.assertFalse(execute_program(self,m,first,flags=state['flags'])['grants'])
         b=td.document(docs,td.BRIDGE_SOURCE);bm=Module(b.build_raw());one,_=td.bridge_targets(b)
         def read(k):return execute_program(self,bm,one,(k,),state['flags'])['result']
@@ -265,8 +344,65 @@ class NativeTutorialTests(unittest.TestCase):
         td.apply_choices(docs,{p.key:True});td.validate_export(docs);self.assertEqual(td.inspect_state(docs,p)[0],'disabled')
         scene.tutorial_programs.clear();scene.tutorial_programs.add(td.BRIDGE_PREFIX+p.key)
         with self.assertRaises(td.TutorialError):scene.build_raw()
-        scene.tutorial_programs.clear();bridge.tutorial_programs={td.BRIDGE_PREFIX+'cai-exam'}
+        scene.tutorial_programs.clear();bridge.tutorial_programs={td.BRIDGE_PREFIX+'cai-exploration'}
         with self.assertRaises(ScriptError):bridge.build_raw()
+
+    def test_certification_permits_native_initializers_and_reversal(self):
+        docs,sources=self.docs();exams=[p for p in td.PRESETS if p.group==2]
+        self.assertEqual(len(exams),4)
+        original={k:d.raw for k,d in docs.items()}
+        td.apply_choices(docs,{p.key:True for p in exams});td.validate_export(docs)
+        for p in exams:
+            d=td.document(docs,p.script);m=Module(d.build_raw());fi=td.script_target(d,p)
+            effect=execute_program(self,m,fi)
+            self.assertEqual(effect['grants'],[('item',('下級資格手形',1))])
+            self.assertTrue(effect['flags']['機能開放_資格試験']);self.assertFalse(effect['flags']['禁止_転職']);self.assertEqual(effect['advances'],1)
+            self.assertFalse(execute_program(self,m,fi,flags=effect['flags'])['grants'])
+            self.assertEqual(m.function_storage[fi],(4,((('string',''),4),),1,(),()))
+            for owner,v,r in td.targets(docs,p):
+                self.assertEqual(v.value(r,v.by_offset[0x28]),list(p.entry_args))
+                for off in td.CONTROLLED:
+                    if off!=0x28:self.assertEqual(v.value(r,v.by_offset[off]),v.original(r,v.by_offset[off]))
+            d.tutorial_programs.remove(p.key)
+            with self.assertRaisesRegex(td.TutorialError,'missing its completion'):td.validate_export(docs)
+            self.assertEqual(td.inspect_state(docs,p)[0],'repair');td.apply_choices(docs,{p.key:True})
+        fresh,_=self.docs();load_suite_project(fresh,json.loads(json.dumps(suite_project(docs))))
+        self.assertEqual(suite_project(docs),suite_project(fresh))
+        td.apply_choices(docs,{p.key:False for p in exams});td.validate_export(docs)
+        for k,d in docs.items():
+            if d.filename!=td.BRIDGE_SOURCE:self.assertEqual(d.build(),original[k])
+
+    def test_original_food_roses_and_magic_shard_grants_are_preserved_once(self):
+        expected={'cai-recruitment':('熟成ゴーシュ',1),'dietrich-recruitment':('素朴なゴーシュ',1),
+                  'dietrich-strengthening':('魔響石',40),'dietrich-secrets':('魔響石',50),'leda-catania':('真紅の薔薇の花束',1)}
+        docs,_=self.docs();td.apply_choices(docs,{key:True for key in expected})
+        for key,gift in expected.items():
+            p=td.BY_KEY[key];d=td.document(docs,p.script);m=Module(d.build_raw());fi=td.script_target(d,p)
+            effect=execute_program(self,m,fi);self.assertEqual(effect['grants'],[('item',gift)])
+            self.assertFalse(execute_program(self,m,fi,flags=effect['flags'])['grants'])
+            # Verify the item/count comes from an original native grant call.
+            old=[]
+            for f in d.module.functions:
+                for j,i in enumerate(f.instructions):
+                    if i.name=='CALLBND' and d.module.bindings[i.arguments[0]][0].name=='RunItemGainCount':
+                        count=d.module.functions[d.module.functions.index(f)].instructions[j-11]
+                        item=f.instructions[j-9]
+                        if count.name=='PshC4' and item.name=='PGA':old.append((d.module.constants[item.arguments[0]>>1].text,count.arguments[0]))
+            self.assertIn(gift,old)
+
+    def test_prologue_keeps_unique_weapon_food_completion_and_conditional_equip(self):
+        docs,_=self.docs();p=td.BY_KEY['prologue-investigation'];td.apply_choices(docs,{p.key:True})
+        d=td.document(docs,p.script);m=Module(d.build_raw());fi=td.script_target(d,p)
+        effect=execute_program(self,m,fi)
+        self.assertEqual(effect['grants'],[('item',('サラマンダー＋３',None)),('item',('砂虫肉',None))])
+        self.assertTrue(effect['flags']['拠点_0部2章_チュートリアル目的地達成']);self.assertEqual(effect['advances'],1)
+        self.assertEqual(effect['equips'],[('PID_コウカ','サラマンダー＋３')])
+        again=execute_program(self,m,fi,flags=effect['flags']);self.assertFalse(again['grants']);self.assertFalse(again['equips'])
+        already_owned=execute_program(self,m,fi,unit_items={('PID_コウカ','サラマンダー＋３')})
+        self.assertFalse(already_owned['equips'])
+        td.apply_choices(docs,{p.key:False});self.assertEqual(d.build(),d.raw)
+        bridge=td.document(docs,td.BRIDGE_SOURCE);bm=Module(bridge.build_raw());one,_=td.bridge_targets(bridge)
+        for key in p.read_keys:self.assertTrue(execute_program(self,bm,one,(key,),effect['flags'])['result'])
 
     def test_legacy_migration_restore_and_export_rejection(self):
         docs,sources=self.docs();keys=list(td.LEGACY)

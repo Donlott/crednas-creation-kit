@@ -28,25 +28,34 @@ with tempfile.TemporaryDirectory() as temporary:
                 index=next(i for i in range(tools.index('end')+1) if tools.entrycget(i,'label')=='Forced tutorials…')
                 tools.invoke(index);window=app.tutorial_window;app.update()
                 assert open_editor(app) is window and len(window.variables)==39
-                assert len(app.documents)==209 and app.doc.value(row,app.doc.by_offset[0x5e])==1830
+                assert len(app.documents)==210 and app.doc.value(row,app.doc.by_offset[0x5e])==1830
                 def select(key):
                     window.tree.selection_set(key);window.tree.see(key);window.select();app.update()
-                select('cai-exam');assert str(window.check.cget('state'))=='disabled' and 'permit' in window.reason.get()
-                window.toggle();assert not window.variables['cai-exam'].get()
+                select('cai-exploration');assert str(window.check.cget('state'))=='disabled' and 'time' in window.reason.get()
+                window.toggle();assert not window.variables['cai-exploration'].get()
                 select('cai-arena');assert str(window.check.cget('state'))=='normal'
                 window.check.invoke();assert window.variables['cai-arena'].get()
+                # Applying/reverting an exam hook must refresh the active main form.
+                assert app.switch_module('Events','timeline:0:158',source_file='Timeline_Part1_Kai.bin')
+                select('cai-exam');window.check.invoke();assert window.apply()
+                args=app.widgets[0x28][1].get('1.0','end-1c')
+                assert '位置とスクリプト' in args and td.BY_KEY['cai-exam'].hook in args
+                assert app.apply(True) and td.table_state(app.documents,td.BY_KEY['cai-exam'])=='hooked'
+                window.check.invoke();assert window.apply()
+                assert '初期位置上書' in app.widgets[0x28][1].get('1.0','end-1c')
+                assert app.switch_module('Events','timeline:0:94',source_file='Timeline_Part1_Kai.bin')
                 select('cai-recruitment');window.check.invoke();assert window.variables['cai-recruitment'].get()
                 assert window.apply() and td.inspect_state(app.documents,td.BY_KEY['cai-recruitment'])[0]=='disabled'
                 assert app.widgets[0x21][1].get()=='13' and app.widgets[0x5e][1].get()=='1830'
                 ready=[p for p in td.PRESETS if not p.blocked]
                 for p in ready:window.variables[p.key].set(True)
                 assert window.apply();window.action(app.save_project);window.action(app.export)
-                project=json.loads((temp/'project.json').read_text())
+                project=json.loads((temp/'project.json').read_text(encoding='utf8'))
                 assert project['documents']['Script/hub/Hub_000_KAI.bin.zst']['format']=='fw-script-edits-v2'
                 for p in ready:
                     assert td.inspect_state(app.documents,p)[0]=='disabled'
                     for _,v,r in td.targets(app.documents,p):
-                        for off in td.CONTROLLED:assert v.value(r,v.by_offset[off])==v.original(r,v.by_offset[off])
+                        for off in td.CONTROLLED:assert v.value(r,v.by_offset[off])==(list(p.entry_args) if off==0x28 and p.entry_args else v.original(r,v.by_offset[off]))
                 assert not list((temp/'mod').rglob('*.backup-*'))
                 select('cai-recruitment');window.check.invoke();assert window.apply()
                 assert td.inspect_state(app.documents,td.BY_KEY['cai-recruitment'])[0]=='normal'
@@ -95,7 +104,7 @@ with tempfile.TemporaryDirectory() as temporary:
                 for fn,digest in hashes.items():
                     source=base.parent/fn if fn.startswith('Script/') else base/fn
                     assert hashlib.sha256(source.read_bytes()).digest()==digest
-                print('PASS: 28 groups / 39 route entries; route/search filtering; blocked dependencies; native type/date intact; 20 independent recipes; persistent unlock checks; source guards; save/reload/export; isolated reversal; legacy migration; custom edit protection; script UI guard; no backups; originals unchanged.')
+                print('PASS: 28 groups / 39 route entries; route/search filtering; blocked dependencies; native type/date intact; 25 independent recipes; persistent unlock checks; source guards; save/reload/export; isolated reversal; legacy migration; custom edit protection; script UI guard; no backups; originals unchanged.')
             except Exception as exc:
                 failures.append(exc)
                 import traceback;traceback.print_exc()
