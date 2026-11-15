@@ -4,17 +4,27 @@
 
 **Tools → Buyable mounts…** adds direct mount sales to Dagsion’s item shop for Cai’s Part I campaign, from chapter 5 after the stable unlock. The original supported data provides **22 mount types and 41 skill variants**: horses, Ornius types, flying mounts, war elephants, named unique mounts and their related forms. Engine default/no-mount placeholders with empty trait lists are excluded.
 
-Every skill pair reachable by a saved mount seed receives its own shop entry. The catalog shows the mount, first skill, upgraded skill, price and whether the mount is unique. Skills become available at the normal bond milestones; purchasing does not grant bond levels or bypass riding/class requirements. Wild captures and existing mounts keep their normal behavior.
+Every skill pair reachable by a saved mount seed receives its own shop entry. The catalog shows the mount, first skill, upgraded skill, price, sale availability, per-chapter stock and whether the mount is unique. Skills become available at the normal bond milestones; purchasing does not grant bond levels or bypass riding/class requirements. Wild captures and existing mounts keep their normal behavior.
 
 ## Configure and export
 
 1. Use **Open data…** to choose your extracted game folder or its **GameData** folder. You do not need to open individual tables: CCK finds the item, class and skill files automatically. If the session contains only some of them, opening this tool loads the missing tables without replacing existing edits. If a file is actually missing or unreadable, the error identifies its name and the folder checked.
 2. Open **Tools → Buyable mounts…** and select **Enable direct mount sales**.
 3. Select your original `exefs/main` and English `Item` message bank. Keep the English `Ride` and `Skill` message banks beside it. Only the specifically verified, unmodified executable is accepted.
-4. Refresh the catalog if needed. Search for a mount or skill, select a row, enter its gold price and choose **Set price**. **Apply** also keeps the currently selected row’s pending price. **Reset prices** restores catalog defaults.
+4. Refresh the catalog if needed. Search for a mount or skill, select a row and choose whether to **Sell this variant**. Set its gold price and **Per chapter** limit, then choose **Set offer**. **Apply** also keeps the current row’s pending settings. **Reset prices** changes prices only.
 5. Apply, save the project and export to a separate mod folder. Enable the entire exported mod in your setup, including its ExeFS patch, and restart the game.
 
 Defaults are editable starting prices for this mod. They use 1,000 gold times the mount’s stored value, with a 3× premium for the recognized Move/Dash skills and 4× for Canto/Flying Canto, capped at 65,535 gold. The ordinary horse therefore starts at **1,000 gold for Dodge** and **3,000 gold for Move**. Each variant’s price is independently editable.
+
+## Hide mounts and limit chapter stock
+
+- Clear **Sell this variant** to hide that variant from the vendor. To remove a mount type from sale, hide each of its skill variants. Already-owned mounts are unaffected.
+- **Per chapter = 0** means unlimited. Values **1–127** cap the number of successful purchases of that specific variant per chapter. For example, setting Move horse to 2 permits two purchases before it sells out; the normal chapter supply event refills it up to two. Unused stock does not accumulate above the cap.
+- Limits are separate for each variant, not shared across a mount type. Existing unique-mount ownership rules still apply. Failed delivery does not consume stock.
+
+Availability and stock settings are saved in the project. Older projects default to all variants available with unlimited stock. Apply and re-export the mod, then restart the game. Changes to a running campaign follow the game's existing saved shop counters; the editor does not erase those counters or force an immediate refill. Test the next normal chapter transition to verify replenishment in your save.
+
+Hidden entries retain their original generated item indexes and shop-row identities, so toggling availability does not reset their counters or shift later variants. Hiding uses the existing route condition together with its inverse; it does not delete definitions or saved mounts.
 
 The catalog reads names, skills and reachable variants from your current source tables and English banks. No mount tables, names banks or executable are distributed with CCK. During export CCK adds item definitions and shop rows, appends their English names/descriptions to your item bank and generates a small IPS32 patch. Existing table edits and message indexes are retained. These generated entries are export-time overlays, rather than manual item-table edits. Original files are never rewritten.
 

@@ -128,6 +128,19 @@ class MountProjectTests(unittest.TestCase):
         for broken in ({**before,'format':'cck-buyable-mounts-v2','price':1000,'move_price':None},{**before,'format':'cck-buyable-mounts-v2','price':1000}):
             with self.assertRaises(DataError):fresh.load_project(broken)
 
+    def test_availability_limits_roundtrip_and_older_projects_default_to_unlimited(self):
+        d=mounts.MountPatch(self.main,self.bank);d.configure_all(True,{mounts.IID:1000},[mounts.IID],{mounts.MOVE_IID:2})
+        fresh=mounts.MountPatch(self.main,self.bank);fresh.load_project(d.project())
+        self.assertEqual(fresh.disabled,{mounts.IID});self.assertEqual(fresh.limits,{mounts.MOVE_IID:2})
+        before=fresh.project()
+        for disabled,limits in [(['bad'],{}),([],{mounts.IID:0}),([],{mounts.IID:128}),([],{mounts.IID:True}),([],{mounts.IID:'2'})]:
+            with self.assertRaises(DataError):fresh.configure_all(True,{},disabled,limits)
+            self.assertEqual(fresh.project(),before)
+        old={**before,'format':'cck-buyable-mounts-v3'};old.pop('disabled');old.pop('limits')
+        fresh.load_project(old);self.assertEqual((fresh.disabled,fresh.limits),(set(),{}))
+        invalid={**before,'disabled':[{}]}
+        with self.assertRaises(DataError):fresh.load_project(invalid)
+
     def test_reopen_sources_and_failure_preserves_membership(self):
         d=mounts.MountPatch(self.main,self.bank);d.configure(True,1000)
         docs={mounts.MODULE:d};sources={mounts.MODULE:self.main};project=suite_project(docs)
@@ -209,6 +222,27 @@ class NativeSourceTests(unittest.TestCase):
         self.assertEqual(result[native.IPS_PATH],native.catalog_ips32(rows))
         self.assertEqual(new.value(new.by_pid[mounts.IID],new.by_offset[0x4c]),1234)
         self.assertEqual(new.value(new.by_pid[mounts.MOVE_IID],new.by_offset[0x4c]),3000)
+
+    def test_hidden_and_limited_offers_keep_ids_and_export_native_stock_fields(self):
+        item=Item((Path(DATA)/'Item.bin').read_bytes());job=Job((Path(DATA)/'Job.bin').read_bytes());skills=Skill((Path(DATA)/'Skill.bin').read_bytes())
+        patch=mounts.MountPatch(MAIN,Path(BANK)/'Item.msbt.zst');patch.configure(True,1000,3000)
+        docs={'Items':item,'Classes':job,'Skills':skills,mounts.MODULE:patch}
+        before=mounts.build_outputs(docs);original=Item(before['romfs/GameData/Item.bin'])
+        patch.configure_all(True,patch.prices,[mounts.IID],{mounts.MOVE_IID:2})
+        after=mounts.build_outputs(docs);changed=Item(after['romfs/GameData/Item.bin'])
+        self.assertEqual(before[native.IPS_PATH],after[native.IPS_PATH])
+        self.assertEqual([r.pid for r in original.records],[r.pid for r in changed.records])
+        first=original.views['shops'];second=changed.views['shops']
+        self.assertEqual([(r.pid,r.index) for r in first.records],[(r.pid,r.index) for r in second.records])
+        for r in second.records:
+            iid=second.value(r,second.by_offset[0x28])
+            if iid==mounts.IID:
+                conditions=second.value(r,second.by_offset[0x38]);self.assertIn('カイ篇',conditions);self.assertIn('!カイ篇',conditions)
+            if iid==mounts.MOVE_IID:
+                self.assertEqual([second.value(r,second.by_offset[o]) for o in (0x6b,0x6c)],[2,2])
+            old=first.by_pid[r.pid]
+            self.assertEqual(struct.unpack_from('<HH',original.raw,old.offset+20),struct.unpack_from('<HH',changed.raw,r.offset+20))
+        self.assertEqual(item.raw,(Path(DATA)/'Item.bin').read_bytes())
 
     def test_changed_messages_and_reserved_item_fail_before_export(self):
         item=Item((Path(DATA)/'Item.bin').read_bytes());job=Job((Path(DATA)/'Job.bin').read_bytes())

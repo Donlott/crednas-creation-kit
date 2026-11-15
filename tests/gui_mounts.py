@@ -24,10 +24,12 @@ with tempfile.TemporaryDirectory() as directory:
                 tools.invoke(index);window=app.mount_window;app.update();assert open_editor(app) is window
                 window.main_path.set(str(main));window.message_path.set(str(english/'Item.msbt.zst'));window.enabled.set(True)
                 window.tree.selection_set(IID);window.select();app.update();window.gold.set('0');assert not window.apply() and MODULE not in app.documents and len(errors)==1
-                window.gold.set('1000');assert window.set_price();window.tree.selection_set(MOVE_IID);window.select();window.gold.set('5000');assert window.set_price()
+                window.gold.set('1000');assert window.set_price();window.tree.selection_set(MOVE_IID);window.select();window.gold.set('5000');window.limit.set('2');assert window.set_price()
                 assert len(window.offers)==41 and len({o.rid for o in window.offers.values()})==22
                 canto=next(o for o in window.offers.values() if o.skill_name=='Canto');window.tree.selection_set(canto.iid);window.select();window.gold.set('9000');assert window.set_price()
+                window.available.set(False);assert window.set_price()
                 assert window.apply();doc=app.documents[MODULE];assert doc.prices[canto.iid]==9000
+                assert doc.limits[MOVE_IID]==2 and canto.iid in doc.disabled
                 assert doc.enabled and doc.price==1000 and doc.move_price==5000 and app.session_state()!=app.saved_state
                 window.action(app.save_project);window.action(app.export)
                 assert (temp/'mod'/IPS_PATH).is_file()
@@ -37,6 +39,8 @@ with tempfile.TemporaryDirectory() as directory:
                     assert app.switch_module(module),module
                 app.rebuild_translator()
                 window=open_editor(app);window.geometry('1040x740');app.update();assert window.pending_prices[canto.iid]==9000
+                assert window.pending_limits[MOVE_IID]==2 and canto.iid in window.pending_disabled
+                assert window.tree.set(canto.iid,'available')=='No' and window.tree.set(MOVE_IID,'limit')=='2'
                 window.search.set('Canto');app.update();assert window.tree.get_children() and all('Canto' in window.tree.set(i,'skill') for i in window.tree.get_children())
                 window.search.set('');app.update()
                 previews=Path(os.environ.get('FW_PREVIEW_DIR',temp));previews.mkdir(parents=True,exist_ok=True)

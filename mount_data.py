@@ -37,7 +37,7 @@ class MountPatch:
                 path=self.message_path.parent/(name+suffix)
                 if path.is_file():self.catalog_paths[name]=path;break
         self.catalog_hashes={name:digest(path.read_bytes()) for name,path in self.catalog_paths.items()}
-        self.enabled=False;self.prices={}
+        self.enabled=False;self.prices={};self.disabled=set();self.limits={}
 
     @property
     def price(self):return self.prices.get(IID,1000)
@@ -46,16 +46,21 @@ class MountPatch:
     @property
     def modified(self):return self.enabled
     @property
-    def changes(self):return {('buyable-mounts',0):deepcopy(self.prices)} if self.enabled else {}
-    def snapshot_edits(self):return self.enabled,deepcopy(self.prices)
-    def restore_edits(self,state):self.enabled,self.prices=deepcopy(state)
-    def clear_edits(self):self.enabled=False;self.prices={}
+    def changes(self):return {('buyable-mounts',0):(deepcopy(self.prices),sorted(self.disabled),deepcopy(self.limits))} if self.enabled else {}
+    def snapshot_edits(self):return self.enabled,deepcopy(self.prices),set(self.disabled),deepcopy(self.limits)
+    def restore_edits(self,state):self.enabled,self.prices,self.disabled,self.limits=deepcopy(state)
+    def clear_edits(self):self.enabled=False;self.prices={};self.disabled=set();self.limits={}
 
-    def configure_all(self,enabled,prices):
+    def configure_all(self,enabled,prices,disabled=None,limits=None):
         from fw_editor import DataError
         if type(enabled) is not bool or not isinstance(prices,dict) or len(prices)>256:raise DataError('Invalid mount catalog settings.')
         if any(not isinstance(key,str) or not key.startswith(PREFIX) or len(key)>96 or type(value) is not int or not 1<=value<=65535 for key,value in prices.items()):raise DataError('Each mount price must be an integer from 1 to 65,535 gold with a valid offer ID.')
-        self.enabled=enabled;self.prices=deepcopy(prices)
+        if disabled is None:disabled=self.disabled
+        if limits is None:limits=self.limits
+        def valid_key(key):return isinstance(key,str) and key.startswith(PREFIX) and len(key)<=96
+        if not isinstance(disabled,(list,tuple,set)) or len(disabled)>256 or any(not valid_key(key) for key in disabled):raise DataError('Invalid disabled mount offers.')
+        if not isinstance(limits,dict) or len(limits)>256 or any(not valid_key(key) or type(value) is not int or not 1<=value<=127 for key,value in limits.items()):raise DataError('A per-chapter mount limit must be from 1 to 127, or use unlimited.')
+        self.enabled=enabled;self.prices=deepcopy(prices);self.disabled=set(disabled);self.limits=deepcopy(limits)
 
     def configure(self,enabled,price,move_price=None):
         # Old two-horse projects and API callers retain their price choices.
@@ -63,22 +68,25 @@ class MountPatch:
         self.configure_all(enabled,{**self.prices,IID:price,MOVE_IID:move_price})
 
     def project(self):
-        return {'format':'cck-buyable-mounts-v3','source_file':FILENAME,'main_path':str(self.main_path),
+        return {'format':'cck-buyable-mounts-v4','source_file':FILENAME,'main_path':str(self.main_path),
                 'main_sha256':MAIN_SHA256,'message_path':str(self.message_path),'message_sha256':self.message_sha256,
-                'catalog_message_sha256':dict(self.catalog_hashes),'enabled':self.enabled,'prices':dict(self.prices)}
+                'catalog_message_sha256':dict(self.catalog_hashes),'enabled':self.enabled,'prices':dict(self.prices),'disabled':sorted(self.disabled),'limits':dict(self.limits)}
 
     def load_project(self,project):
         from fw_editor import DataError
-        if not isinstance(project,dict) or project.get('format') not in ('cck-buyable-mounts-v1','cck-buyable-mounts-v2','cck-buyable-mounts-v3') or project.get('source_file')!=FILENAME or project.get('main_sha256')!=MAIN_SHA256 or project.get('message_sha256')!=self.message_sha256 or project.get('main_path')!=str(self.main_path) or project.get('message_path')!=str(self.message_path):raise DataError('Buyable mounts project does not match its original executable/messages.')
-        if project['format']=='cck-buyable-mounts-v3':
+        if not isinstance(project,dict) or project.get('format') not in ('cck-buyable-mounts-v1','cck-buyable-mounts-v2','cck-buyable-mounts-v3','cck-buyable-mounts-v4') or project.get('source_file')!=FILENAME or project.get('main_sha256')!=MAIN_SHA256 or project.get('message_sha256')!=self.message_sha256 or project.get('main_path')!=str(self.main_path) or project.get('message_path')!=str(self.message_path):raise DataError('Buyable mounts project does not match its original executable/messages.')
+        if project['format'] in ('cck-buyable-mounts-v3','cck-buyable-mounts-v4'):
             if project.get('catalog_message_sha256')!=self.catalog_hashes:raise DataError('The original Ride/Skill message sources differ from the saved mount project.')
-            self.configure_all(project.get('enabled'),project.get('prices'));return
+            disabled=project.get('disabled') if project['format']=='cck-buyable-mounts-v4' else []
+            limits=project.get('limits') if project['format']=='cck-buyable-mounts-v4' else {}
+            if not isinstance(disabled,list) or any(not isinstance(key,str) for key in disabled) or len(disabled)!=len(set(disabled)) or not isinstance(limits,dict):raise DataError('Invalid mount availability/stock settings.')
+            self.configure_all(project.get('enabled'),project.get('prices'),disabled,limits);return
         price=project.get('price')
         if project['format']=='cck-buyable-mounts-v2':
             move_price=project.get('move_price')
             if type(move_price) is not int:raise DataError('Missing or invalid Move horse price.')
         else:move_price=min(65535,max(3000,price*3)) if type(price) is int else 3000
-        self.configure(project.get('enabled'),price,move_price)
+        self.configure_all(project.get('enabled'),{IID:price,MOVE_IID:move_price},[],{})
 
     def catalog_names(self):
         from fw_editor import DataError,messages
@@ -159,7 +167,7 @@ def build_outputs(documents):
     validate_main(patch.main_path.read_bytes());bank=patch.message_path.read_bytes()
     if digest(bank)!=patch.message_sha256:raise DataError('The original Item message bank changed. Re-select it before exporting Buyable mounts.')
     item_source,_,_=source_tables(documents);offers=catalog_for(documents,patch)
-    if set(patch.prices)-{o.iid for o in offers}:raise DataError('Saved prices refer to mount variants no longer present. Reset catalog prices or restore the matching data.')
+    if (set(patch.prices)|patch.disabled|set(patch.limits))-{o.iid for o in offers}:raise DataError('Saved mount settings refer to variants no longer present. Restore the matching data or reset those settings.')
     for d in documents.values():
         if isinstance(d,Item) and any(pid.startswith(PREFIX) for pid in d.by_pid):raise DataError('Reserved Buyable mounts IIDs already exist. Use original sources and let this patch generate them.')
     item=Item(item_source.build())
@@ -171,9 +179,11 @@ def build_outputs(documents):
     table=matches[0];rows=shops.rows_by_table[table.pid]
     if not rows:raise DataError('The Dagsion item-shop layout is unsupported.')
     for offer in offers:
-        price=patch.prices.get(offer.iid,offer.default_price)
+        price=patch.prices.get(offer.iid,offer.default_price);limit=patch.limits.get(offer.iid,0)
+        conditions=['1部','カイ篇','5章以降','機能開放_厩舎']
+        if offer.iid in patch.disabled:conditions.append('!カイ篇') # Known contradictory predicate; keep row IDs stable.
         shops.append_entry(table.pid,{0x20:shops.value(rows[0],shops.by_offset[0x20]),0x28:offer.iid,
-            0x38:['1部','カイ篇','5章以降','機能開放_厩舎'],0x48:[],0x58:[],0x68:price,0x6a:0,0x6b:0,0x6c:0})
+            0x38:conditions,0x48:[],0x58:[],0x68:price,0x6a:0,0x6b:limit,0x6c:limit})
     exported=item.build();check=Item(exported);native=[];additions=[]
     for offer in offers:
         index=struct.unpack_from('<H',check.raw,check.by_pid[offer.iid].offset+16)[0]
