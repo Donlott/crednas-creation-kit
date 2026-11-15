@@ -2,7 +2,9 @@
 
 Open your original game data and choose **Tools → Forced tutorials…**. The catalog contains **28 sequence groups with 39 route-specific entries**. Filter by route or search by name/list number, then select an entry to see its behavior and dependencies.
 
-The goal is to remove compulsory guidance while keeping the normal timeline and access to the systems it introduces. **33 entries currently have experimental recipes; none are gameplay-verified.** All implemented recipes can be selected for testing. The other 6 entries have no implementation yet; they are listed for reference.
+The goal is to remove compulsory guidance while keeping the normal timeline and access to the systems it introduces. **All 39 entries currently have experimental recipes; none are gameplay-verified.** They can be selected for testing. The lure/capture option deliberately omits the tutorial animal reward.
+
+**A guidance bypass does not necessarily complete the underlying quest or battle.** The hair-clip and first dread-warrior options shorten their introductions and reporting scenes; their challenges remain required. The field and village-performance options let you do the activities voluntarily, with their quests and rewards remaining pending. Each option describes its scope before you apply it.
 
 ## Use and status
 
@@ -11,7 +13,7 @@ Select **Bypass forced guidance**, then press **Apply**. Save a project or expor
 - **Off · testable / On · experimental:** a reviewed recipe is available or enabled.
 - **Not implemented:** no executable bypass exists yet; the detail panel explains the missing work.
 - **Source / edit conflict:** required originals are missing, differ from supported version 1.00, or have overlapping custom edits.
-- **Migration needed / Unlock checks needed:** apply to repair an older project, or uncheck to restore its original scene.
+- **Migration needed / Recipe needs repair:** apply to complete or repair the recipe, or uncheck to restore its original scene and commands.
 
 ## Available sequences
 
@@ -22,12 +24,17 @@ Select **Bypass forced guidance**, then press **Apply**. Save a project or expor
 | Vandahl Trading Company visit | All four | Company unlock, trade-information flag and read-gated access; no forced purchase. Subsequent exploration remains a separate sequence. |
 | World-map exploration introduction | Cai, Dietrich, Leda | Omit the compulsory first Explore roll. Keep native unlock notifications, route-reveal cues, dialogue/read history and scheduled progression. No random loot or action cost is simulated. |
 | Quest-board and inn orientation | Cai | Quest journal, notice-board access and the original 1,500 gold grant once; the two scheduled stages retain separate completion markers. |
+| Hair clip / first delivery — guidance only | Cai | Native quest acceptance/report dialogs and renown journal; actual battles, mine, pickup and travel remain required. Separate stage markers protect return read checks. |
 | Guzran recruitment lesson | Cai | Original food gift once; normal next-stage request; no forced negotiation or automatic recruitment. |
 | Initial stable visit | Cai | Stable access; the later capture sequence retains its native behavior. |
-| Feeding visit after capture | Cai | Stable access and the captured animal; no forced feeding transaction. |
+| Lure / capture lesson — no animal reward | Cai | Two sample bait, lure unlock, route reveals, dialogue, travel and native dates. No tutorial animal is created. The following feeding skip is enabled with it. |
+| Feeding visit after capture | Cai | Stable access and any existing animals; no forced feeding transaction. Required by the no-animal capture skip. |
+| Field lesson — optional activity | Cai | Original vegetable quest and sample seeds, farming unlock, travel and scheduled next-day boundary. Planting and accelerated tutorial progress are omitted; no field or crops are invented. Complete the delivery voluntarily for its rewards. |
+| Answerer's Cry — keep encounter | Dietrich | Renown journal and detection unlock notice; original enemy group placed at the same bridge. Detection interaction is omitted; actual encounter, travel and rewards remain native. |
 | Yang Jie recruitment lesson | Dietrich | Original food gift once; normal next-stage request; no forced negotiation or automatic recruitment. |
 | Follow-cat / combat-art strengthening guidance | Dietrich | Strengthening access and the original 40 magic echo shards once; no forced upgrade or material spending. |
 | Teaching-secrets guidance | Dietrich | Teaching access and the original 50 magic echo shards once; normal prerequisites and costs remain. |
+| First dread warrior — guidance only | Dietrich | Native acceptance/report dialogs and arranger introduction; actual mine, battle and return remain required. Native quest reporting retains its skill, money and renown rewards. |
 | First battalion assignment / wolf practice | Theodora | Barracks access and the original novice mercenary battalion. The original first-visit flag prevents duplicate battalion grants. No forced assignment or practice battle. |
 | Battalion dispatch lesson | Theodora | Original novice-priest battalion gift and fixed five hishibana supplies; exploration/dispatch unlock notices, route reveals, dialogue and schedule fields. The supply quest still uses native delivery/reporting. |
 | First battalion recruitment | Theodora | Fixed basic-warrior battalion through the native grant command; recruitment unlock notice, town/route reveals, dialogue and schedule fields. No compulsory recruitment operation or assignment. |
@@ -37,6 +44,7 @@ Select **Bypass forced guidance**, then press **Apply**. Save a project or expor
 | Supplies/remittance introduction | Theodora | Original native quest acceptance dialog, remittance access and quest journal; subsequent supply gameplay stays native. |
 | Quest/scouting introduction | Theodora | Original quest/report and next-quest dialogs in order, renown journal, and Salamis food once; the second qualifier remains active. |
 | First tavern lesson | Leda | Original native quest acceptance, completion, report/reward and next-quest calls; tavern/hub performance access and journal unlocks; no compulsory walk or instructed performance. |
+| First village performance — optional activity | Leda | Village/route reveals, native dialogue and exploration unlock. Performance is voluntary; its quest and native income/rewards are not auto-completed or granted. |
 | Prologue inspection | Prologue, chapter 2 | Original Salamander +3 and sandworm-meat grants once, the native conditional equip request for Kouka, and the inspection-completion flag. Subsequent preparation unlock and warp/story events stay native. |
 | Drinks introduction | Leda | Drink facility access and the normal vendor placement; its original quest prerequisite remains. No timeline advance or forced purchase. |
 
@@ -56,6 +64,8 @@ The remittance, quest/scouting and tavern bypasses keep the original native ques
 
 The tavern recipe runs the original first-quest acceptance, quest-completion request, report/reward dialog and village-quest acceptance in order. It opens tavern/hub performance access and the journals without unlocking the later theatre. Its later, reused tavern callback remains unchanged. Optional performance gains are not invented. The native schedule is retained, but time normally consumed inside the instructed activity still needs in-game checking.
 
+The hair-clip and first dread-warrior options retain their native acceptance and return-report calls as separate stages. They do not call a quest-completion API, grant quest items or mark a battle won. Their original world-map/dungeon/quest-result events remain. The return conversation's access marker is written only on reaching that return stage. These options do not remove the whole journey or make the challenges optional.
+
 Each quest step and lesson gift has a separate one-time marker. Completed steps are retained if a later step is resumed; repeated entry does not re-run already completed reward/report calls. These markers do not backfill old saves which already passed a prior bypass.
 
 ## Exploration command skips
@@ -74,9 +84,31 @@ Her recruitment bypass replaces the compulsory recruitment command with the exis
 
 These options retain every other cue, including unlock notices, location/route reveals, dialogue and read history. Native event types, dates, conditions and subsequent stages are unchanged, including the later world-map exit and region-restriction reset. They do not simulate operation fees, experience, active commands, assignment state or activity duration. This preserves scheduling data, but the skipped operation's effect on the clock still needs gameplay testing. Normal dispatch and recruitment remain available.
 
-## Remaining native sequences
+## Optional activities and retained encounters
 
-**6 route-specific entries across 6 groups remain unimplemented.** Hair-clip and dread-warrior quest chains, animal capture, farming, Answerer's Cry and the first village performance retain their original behavior. Their unresolved dependencies are listed in the menu. No blanket route-completion flags or guessed quest results are used.
+The field option omits compulsory planting and the later tutorial command-progress cue. Original quest acceptance and sample-seed grants stay in place; seeds are not spent on a forced operation. Farming remains unlocked. No persistent field, mature crop or harvest is created automatically. The vegetable quest remains pending until you grow and deliver its requirements normally. Native next-day dates, travel cues and the free-action boundary stay in place.
+
+The village-performance option removes only its compulsory performance interaction. Village/route reveals, dialogue and the exploration unlock notice remain. The accepted village-performance quest remains available for voluntary completion and reporting. No performance income, item, renown or activity-time outcome is invented. The next Explore lesson has its own checkbox.
+
+The Answerer's Cry option shortens the weapon introduction and replaces forced detection with the game's existing faction-placement command for the exact original tutorial enemy group at the same bridge. It keeps that encounter's native definition and rewards. It does not auto-win a fight or fabricate a detection charge/use record. Route travel and subsequent events remain native.
+
+Multi-stage command edits are limited to named, fingerprinted rows. If only part of a recipe is present, the menu offers repair or restoration. A mixed script/command recipe cannot export with its script completion part missing. Conflicting custom edits are not overwritten.
+
+## Lure/capture without the tutorial animal
+
+This option removes the forced lure, its later command-progress cue and forced capture. **You do not receive the tutorial Ornius.** No animal or pending lure operation is created. The original two sample bait, lure unlock notice, route reveals, dialogue, travel, March 15 noon event and later schedule definitions remain. Unused bait is retained rather than consumed by a forced operation. Capture outcomes, experience and operation-time costs are not simulated.
+
+The option automatically enables **Feeding the captured animal**, so the subsequent lesson cannot demand an animal you did not capture. Its script advances that scheduled stage without opening the instructed stable menu. Stable access and normal voluntary luring, capture and feeding remain available. Existing animals are untouched; ordinary capture probabilities and escape rules are not changed, and animal-related quests are not auto-completed.
+
+Turning the feeding skip off in the menu also turns the dependent capture skip off; press **Apply** to restore both. Turning only the capture skip off leaves the feeding skip selected, so review it separately if you want the original feeding lesson too. Saved projects retain the required script and read-access guard. An incomplete capture edit, missing feeding recipe or missing access guard must be repaired or restored before export. The capture option needs the original feeding script alongside the timeline data.
+
+Apply before the capture sequence and keep the feeding skip enabled through the return to the stable. Restoring original commands after a save has already skipped capture cannot retroactively give that save an animal.
+
+The retained dialogue can still refer to luring or capturing an animal. This option removes the operations and animal reward; it does not rewrite story text or eliminate every travel/camera cue. A variant that automatically grants the original animal would require further investigation of the native capture-result handler.
+
+## Remaining native work
+
+Full quest/battle auto-completion for the hair-clip and dread-warrior chains, automatic field creation/harvesting, and automatic village-performance results are outside the implemented guidance-only options. No blanket route-completion flags or guessed quest results are used.
 
 ## Scheduling, migration and limits
 

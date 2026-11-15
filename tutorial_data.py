@@ -37,9 +37,17 @@ class Preset:
     scene_context:bool=False
     omit_commands:tuple=()
     replace_commands:tuple=()
+    row_commands:tuple=()
+    requires:tuple=()
 
     @property
-    def table_only(self):return bool(self.omit_commands or self.replace_commands)
+    def command_edits(self):return bool(self.omit_commands or self.replace_commands or self.row_commands)
+
+    @property
+    def argument_edits(self):return bool(self.entry_args or self.command_edits)
+
+    @property
+    def table_only(self):return self.command_edits and not self.script
 
 
 PRESETS=tuple(Preset(**p) for p in CATALOG)
@@ -76,6 +84,17 @@ def document(documents,filename):
 
 
 def targets(documents,preset):
+    if preset.row_commands:
+        if preset.omit_commands or preset.replace_commands or preset.entry_args:
+            raise TutorialError('Per-row command edits cannot mix with whole-sequence argument edits.')
+        seen=set();refs={(name,pid) for name,pid,digest in preset.rows}
+        for edit in preset.row_commands:
+            if not isinstance(edit,tuple) or len(edit)!=4:
+                raise TutorialError('Invalid reviewed per-row command edit.')
+            name,pid,omit,replacements=edit
+            if not isinstance(name,str) or not isinstance(pid,str) or (name,pid) in seen or (name,pid) not in refs or not isinstance(omit,tuple) or not isinstance(replacements,tuple) or not (omit or replacements):
+                raise TutorialError('Unknown, duplicate or empty reviewed command row.')
+            seen.add((name,pid))
     found=[]
     for filename,pid,digest in preset.rows:
         owner=document(documents,filename);view=getattr(owner,'views',{}).get('timeline')
@@ -94,40 +113,46 @@ def legacy_values(preset):
 def patched_args(preset,view,row):
     """Change only reviewed arguments; retain native event type and scheduling."""
     original=view.original(row,view.by_offset[0x28])
-    if preset.table_only:
+    omit=preset.omit_commands;replace=preset.replace_commands
+    if preset.row_commands:
+        match=next((edit for edit in preset.row_commands if edit[:2]==(view.filename,row.pid)),None)
+        if match is None:return original
+        _,_,omit,replace=match
+    if preset.command_edits:
         if preset.entry_args or view.original(row,view.by_offset[0x21])!=16:
             raise TutorialError('Command edits require a native world-map event.')
         replacements={}
-        for pair in preset.replace_commands:
+        for pair in replace:
             if not isinstance(pair,tuple) or len(pair)!=2:
                 raise TutorialError('Invalid reviewed command replacement.')
             old,new=pair
             if not isinstance(old,str) or not old or old in replacements or not isinstance(new,tuple) or not new or any(not isinstance(c,str) or not c or any(x in c for x in ('\0','\n','\r')) for c in new):
                 raise TutorialError('Invalid or duplicated reviewed command replacement.')
             replacements[old]=new
-        keys=tuple(preset.omit_commands)+tuple(replacements)
-        if len(set(keys))!=len(keys) or any(original.count(cmd)!=1 for cmd in keys):
+        keys=tuple(omit)+tuple(replacements)
+        if any(not isinstance(cmd,str) or not cmd for cmd in keys) or len(set(keys))!=len(keys) or any(original.count(cmd)!=1 for cmd in keys):
             raise TutorialError('The reviewed compulsory command is missing or duplicated.')
         result=[]
         for command in original:
             if command in replacements:result.extend(replacements[command])
-            elif command not in preset.omit_commands:result.append(command)
+            elif command not in omit:result.append(command)
         if not result:raise TutorialError('A command edit must retain the native event cues.')
         return result
     return list(preset.entry_args) if preset.entry_args else original
 
 
 def table_state(documents,preset):
-    legacy=False;hooked=False
+    legacy=False;needed=0;applied=0
     for _,view,row in targets(documents,preset):
         current={off:view.value(row,view.by_offset[off]) for off in CONTROLLED}
         original={off:view.original(row,view.by_offset[off]) for off in CONTROLLED}
-        patched={**original,0x28:patched_args(preset,view,row)} if preset.entry_args or preset.table_only else None
+        patched={**original,0x28:patched_args(preset,view,row)} if preset.argument_edits else None
+        if patched is not None and patched!=original:needed+=1
         if current==original:continue
-        if patched is not None and current==patched:hooked=True;continue
+        if patched is not None and current==patched:applied+=1;continue
         if preset.key in LEGACY and current==legacy_values(preset):legacy=True
         else:raise TutorialError('The tutorial timeline row has custom action/interval edits. Resolve them in Events first.')
-    return 'legacy' if legacy else 'hooked' if hooked else 'normal'
+    return 'legacy' if legacy else 'partial' if 0<applied<needed else 'hooked' if applied else 'normal'
 
 
 def checked_functions(doc,filename,sha,labels):
@@ -156,21 +181,46 @@ def bridge_targets(doc):
     return checked_functions(doc,BRIDGE_SOURCE,BRIDGE_SHA,('IsAlreadyRead(string)','IsAlreadyRead(string, string)'))
 
 
+def required_presets(preset,trail=()):
+    if preset.key in trail:raise TutorialError('Cyclic tutorial requirements.')
+    result={}
+    for key in preset.requires:
+        if key not in BY_KEY:raise TutorialError('Unknown required tutorial: '+str(key))
+        required=BY_KEY[key];result[key]=required
+        for other in required_presets(required,trail+(preset.key,)):result[other.key]=other
+    return tuple(result.values())
+
+
 def inspect_state(documents,preset):
+    state,reason=inspect_own_state(documents,preset)
+    if state in ('blocked','unavailable'):return state,reason
+    try:
+        for required in required_presets(preset):
+            dependency,detail=inspect_own_state(documents,required)
+            if state=='normal' and dependency in ('blocked','unavailable'):
+                return 'unavailable','Requires '+required.title+': '+detail
+            if state!='normal' and dependency!='disabled':
+                return 'repair','This bypass also requires '+required.title+'. Apply to install both, or turn this bypass off.'
+    except TutorialError as exc:return 'unavailable',str(exc)
+    return state,reason
+
+
+def inspect_own_state(documents,preset):
     if preset.blocked:return 'blocked',preset.blocked
     try:
         state=table_state(documents,preset)
         if preset.table_only:
+            if state=='partial':return 'repair','Only part of this command bypass is present. Apply on to complete it, or off to restore every original command.'
             return ('disabled','Reviewed world-map command edits enabled; native cues and scheduling data are retained.') if state=='hooked' else ('normal','A reviewed command skip is available. See the retained rewards and omitted activity costs in the description.')
         doc=document(documents,preset.script);script_targets(doc,preset)
         bridge=document(documents,BRIDGE_SOURCE) if preset.read_keys else None
         if bridge:bridge_targets(bridge)
         if state=='legacy':return 'legacy','Old event-type replacement: Apply to migrate it, or turn it off to restore the native event.'
         if preset.key in doc.tutorial_programs:
-            if (preset.entry_args and state!='hooked') or (bridge and BRIDGE_PREFIX+preset.key not in bridge.tutorial_programs):
+            if (preset.argument_edits and state!='hooked') or (bridge and BRIDGE_PREFIX+preset.key not in bridge.tutorial_programs):
                 return 'repair','Apply to complete this bypass and its persistent access checks.'
             return 'disabled','Guidance bypass enabled. Native scheduling retained; skipped introduction markers preserve facility access.'
-        if state=='hooked':return 'repair','Apply on to install the missing completion recipe, or off to restore its native entry arguments.'
+        if state in ('hooked','partial'):return 'repair','Apply on to install the complete recipe, or off to restore its native entry arguments.'
         return 'normal','Original sequence. The reviewed completion recipe is available for testing.'
     except (ValueError,AttributeError) as exc:return 'unavailable',str(exc)
 
@@ -331,8 +381,15 @@ def programs_for_document(doc):
 def apply_choices(documents,choices):
     if not isinstance(choices,dict) or any(k not in BY_KEY or type(v) is not bool for k,v in choices.items()):
         raise TutorialError('Unknown tutorial choice.')
+    expanded=dict(choices)
+    for key,enabled in choices.items():
+        if not enabled:continue
+        for required in required_presets(BY_KEY[key]):
+            if choices.get(required.key) is False:
+                raise TutorialError(BY_KEY[key].title+' requires '+required.title+'. Turn off the dependent bypass first, or enable both.')
+            expanded[required.key]=True
     plans=[];snapshots={};changed=0
-    for key,disabled in choices.items():
+    for key,disabled in expanded.items():
         preset=BY_KEY[key];state,reason=inspect_state(documents,preset)
         if state not in ('normal','disabled','legacy','repair'):raise TutorialError(preset.title+': '+reason)
         doc=None if preset.table_only else document(documents,preset.script)
@@ -345,7 +402,7 @@ def apply_choices(documents,choices):
             for _,view,row in refs:
                 if state=='legacy':
                     for off in CONTROLLED:view.set(row,view.by_offset[off],view.original(row,view.by_offset[off]))
-                if preset.entry_args or preset.table_only:view.set(row,view.by_offset[0x28],patched_args(preset,view,row) if disabled else view.original(row,view.by_offset[0x28]))
+                if preset.argument_edits:view.set(row,view.by_offset[0x28],patched_args(preset,view,row) if disabled else view.original(row,view.by_offset[0x28]))
             if doc is None:continue
             if disabled:
                 doc.tutorial_programs.add(preset.key)
@@ -354,17 +411,32 @@ def apply_choices(documents,choices):
             # Keep marker-aware guards after disabling. Existing saves must not
             # lose facilities simply because their introduction was omitted.
         for owner in snapshots:owner.build()
+        validate_requirements(documents)
     except Exception:
         for owner,state in snapshots.items():owner.restore_edits(state)
         raise
     return changed
 
 
+def validate_requirements(documents):
+    for preset in PRESETS:
+        if not preset.requires or not all(any(d.filename==ref[0] for d in documents.values()) for ref in preset.rows):continue
+        try:state=table_state(documents,preset)
+        except TutorialError:continue # Unrelated manual event edits retain their ordinary export behavior.
+        script=next((d for d in documents.values() if d.filename==preset.script),None)
+        if state=='partial':raise TutorialError('Incomplete tutorial command bypass: '+preset.title+'. Repair or restore it before exporting.')
+        if state!='hooked' and preset.key not in getattr(script,'tutorial_programs',()):continue
+        for required in required_presets(preset):
+            if inspect_own_state(documents,required)[0]!='disabled':
+                raise TutorialError(preset.title+' requires '+required.title+'. Apply the complete bypass before exporting.')
+
+
 def validate_export(documents):
     """Reject obsolete shortcuts and missing unlock guards."""
+    validate_requirements(documents)
     for preset in PRESETS:
-        # Command-only recipes are ordinary source-guarded argument edits. They
-        # add no script/bridge dependency; unrelated custom event edits remain valid.
+        # Command recipes are ordinary source-guarded argument edits. Required
+        # companions were checked above; unrelated custom event edits remain valid.
         if preset.table_only:continue
         if preset.key in LEGACY and any(d.filename==preset.rows[0][0] for d in documents.values()):
             try:state=table_state(documents,preset)
@@ -374,9 +446,9 @@ def validate_export(documents):
         if script and preset.key in getattr(script,'tutorial_programs',()):
             # Active recipes must include their unchanged, reviewed native rows.
             state=table_state(documents,preset)
-            if state!=('hooked' if preset.entry_args else 'normal'):raise TutorialError('An active tutorial recipe conflicts with its timeline: '+preset.title)
+            if state!=('hooked' if preset.argument_edits else 'normal'):raise TutorialError('An active tutorial recipe conflicts with its timeline: '+preset.title)
             if preset.read_keys:
                 bridge=document(documents,BRIDGE_SOURCE);bridge_targets(bridge)
                 if BRIDGE_PREFIX+preset.key not in bridge.tutorial_programs:raise TutorialError('A tutorial recipe is missing persistent facility-access checks: '+preset.title)
-        elif preset.entry_args and all(any(d.filename==ref[0] for d in documents.values()) for ref in preset.rows):
-            if table_state(documents,preset)=='hooked':raise TutorialError('A tutorial entry hook is missing its completion recipe: '+preset.title)
+        elif preset.argument_edits and all(any(d.filename==ref[0] for d in documents.values()) for ref in preset.rows):
+            if table_state(documents,preset) in ('hooked','partial'):raise TutorialError('A tutorial entry hook is missing its completion recipe: '+preset.title)

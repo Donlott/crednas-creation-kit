@@ -31,9 +31,17 @@ with tempfile.TemporaryDirectory() as temporary:
                 assert len(app.documents)==210 and app.doc.value(row,app.doc.by_offset[0x5e])==1830
                 def select(key):
                     window.tree.selection_set(key);window.tree.see(key);window.select();app.update()
-                select('cai-capture');assert str(window.check.cget('state'))=='disabled' and 'time' in window.reason.get()
-                assert window.tree.item('cai-capture','values')[-1]=='Not implemented'
-                window.toggle();assert not window.variables['cai-capture'].get()
+                select('cai-capture');assert str(window.check.cget('state'))=='normal'
+                assert 'No tutorial animal' in window.detail.get()
+                window.toggle();assert window.variables['cai-capture'].get() and window.variables['cai-feeding'].get()
+                assert window.apply() and td.inspect_state(app.documents,td.BY_KEY['cai-capture'])[0]=='disabled'
+                td.document(app.documents,td.BY_KEY['cai-feeding'].script).tutorial_programs.remove('cai-feeding')
+                window.refresh();select('cai-capture')
+                assert window.states['cai-capture'][0]=='repair' and window.variables['cai-feeding'].get()
+                assert window.apply() and td.inspect_state(app.documents,td.BY_KEY['cai-capture'])[0]=='disabled'
+                select('cai-feeding');window.check.invoke()
+                assert not window.variables['cai-capture'].get() and not window.variables['cai-feeding'].get()
+                assert window.apply() and td.inspect_state(app.documents,td.BY_KEY['cai-capture'])[0]=='normal'
                 select('cai-arena');assert str(window.check.cget('state'))=='normal'
                 window.check.invoke();assert window.variables['cai-arena'].get()
                 # Applying/reverting an exam hook must refresh the active main form.
@@ -61,6 +69,28 @@ with tempfile.TemporaryDirectory() as temporary:
                     assert app.apply(True) and td.inspect_state(app.documents,td.BY_KEY[key])[0]=='disabled'
                     window.check.invoke();assert window.apply()
                     assert 'コマンド強制' in app.widgets[0x28][1].get('1.0','end-1c')
+                # Mixed script/table edits and independently scoped field stages.
+                for key,filename,row_id,token in (
+                    ('dietrich-answerer','Timeline_Part1_Dit.bin','timeline:0:108','勢力配置('),
+                    ('cai-farming','Timeline_Part1_Kai.bin','timeline:0:181','通知(畑を作る)'),
+                    ('leda-village','Timeline_Part1_Led.bin','timeline:0:100','通知(探索)')):
+                    assert app.switch_module('Events',row_id,source_file=filename)
+                    select(key);assert str(window.check.cget('state'))=='normal'
+                    window.check.invoke();assert window.apply()
+                    args=app.widgets[0x28][1].get('1.0','end-1c')
+                    assert token in args and 'コマンド強制' not in args
+                    assert app.apply(True) and td.inspect_state(app.documents,td.BY_KEY[key])[0]=='disabled'
+                    if key=='cai-farming':
+                        _,v,r=td.targets(app.documents,td.BY_KEY[key])[-1]
+                        v.set(r,v.by_offset[0x28],v.original(r,v.by_offset[0x28]))
+                        window.refresh();select(key)
+                        assert window.states[key][0]=='repair' and window.selected.get()
+                        assert window.apply() and td.inspect_state(app.documents,td.BY_KEY[key])[0]=='disabled'
+                    window.check.invoke();assert window.apply()
+                    assert 'コマンド強制' in app.widgets[0x28][1].get('1.0','end-1c')
+                for key in ('cai-hair-clip','dietrich-dread-warrior'):
+                    select(key);assert str(window.check.cget('state'))=='normal'
+                    assert 'remain required' in window.detail.get()
                 assert app.switch_module('Events','timeline:0:94',source_file='Timeline_Part1_Kai.bin')
                 select('cai-recruitment');window.check.invoke();assert window.variables['cai-recruitment'].get()
                 assert window.apply() and td.inspect_state(app.documents,td.BY_KEY['cai-recruitment'])[0]=='disabled'
@@ -76,7 +106,7 @@ with tempfile.TemporaryDirectory() as temporary:
                 for p in ready:
                     assert td.inspect_state(app.documents,p)[0]=='disabled'
                     for _,v,r in td.targets(app.documents,p):
-                        for off in td.CONTROLLED:assert v.value(r,v.by_offset[off])==(td.patched_args(p,v,r) if off==0x28 and (p.entry_args or p.table_only) else v.original(r,v.by_offset[off]))
+                        for off in td.CONTROLLED:assert v.value(r,v.by_offset[off])==(td.patched_args(p,v,r) if off==0x28 and p.argument_edits else v.original(r,v.by_offset[off]))
                 assert not list((temp/'mod').rglob('*.backup-*'))
                 select('cai-recruitment');window.check.invoke();assert window.apply()
                 assert td.inspect_state(app.documents,td.BY_KEY['cai-recruitment'])[0]=='normal'
@@ -125,7 +155,7 @@ with tempfile.TemporaryDirectory() as temporary:
                 for fn,digest in hashes.items():
                     source=base.parent/fn if fn.startswith('Script/') else base/fn
                     assert hashlib.sha256(source.read_bytes()).digest()==digest
-                print('PASS: 28 groups / 39 route entries; route/search filtering; blocked dependencies; native type/date intact; 33 independent recipes; persistent unlock checks; source guards; save/reload/export; isolated reversal; legacy migration; custom edit protection; script UI guard; no backups; originals unchanged.')
+                print('PASS: 28 groups / 39 route entries; route/search filtering; blocked dependencies; native type/date intact; 39 recipes; capture/feeding dependency; persistent unlock checks; source guards; save/reload/export; isolated reversal; legacy migration; custom edit protection; script UI guard; no backups; originals unchanged.')
             except Exception as exc:
                 failures.append(exc)
                 import traceback;traceback.print_exc()

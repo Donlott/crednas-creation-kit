@@ -2,10 +2,10 @@
 import tkinter as tk
 from tkinter import ttk,messagebox
 from branding import APP_NAME
-from tutorial_data import PRESETS,inspect_state,apply_choices,load_sources
+from tutorial_data import PRESETS,inspect_state,apply_choices,load_sources,required_presets
 
 
-LABELS={'normal':'Off · testable','disabled':'On · experimental','legacy':'Migration needed','repair':'Unlock checks needed',
+LABELS={'normal':'Off · testable','disabled':'On · experimental','legacy':'Migration needed','repair':'Recipe needs repair',
         'blocked':'Not implemented','unavailable':'Source / edit conflict'}
 
 
@@ -34,7 +34,7 @@ class TutorialEditor(tk.Toplevel):
         body=ttk.Frame(self,padding=10);body.pack(fill='both',expand=True)
         ttk.Label(body,text='Forced tutorials · progression checks',style='Title.TLabel').pack(anchor='w')
         self.intro_label=ttk.Label(body,text='Implemented bypasses are available for testing. They retain native timeline scheduling data; runtime clock and flag behavior still need in-game checks. '
-                  'Unlock checks remain in exported projects when a bypass is turned off, for saves that skipped the introduction. Entries marked Not implemented have no bypass yet.',wraplength=930)
+                  'Unlock checks remain in exported projects when a bypass is turned off. Required companion bypasses are selected together; read each description for omitted rewards.',wraplength=930)
         self.intro_label.pack(fill='x',pady=(5,8))
         bar=ttk.Frame(body);bar.pack(fill='x',pady=(0,5))
         ttk.Entry(bar,textvariable=self.search).pack(side='left',fill='x',expand=True,padx=(0,6))
@@ -68,6 +68,8 @@ class TutorialEditor(tk.Toplevel):
         for preset in PRESETS:
             state,reason=inspect_state(self.app.documents,preset);self.states[preset.key]=(state,reason)
             self.variables[preset.key].set(state in ('disabled','legacy','repair'))
+        for preset in PRESETS:
+            if self.variables[preset.key].get():self.set_choice(preset.key,True)
         self.filter()
 
     def filter(self):
@@ -98,7 +100,17 @@ class TutorialEditor(tk.Toplevel):
 
     def choose(self):
         if self.current and self.states[self.current][0] in ('normal','disabled','legacy','repair'):
-            self.variables[self.current].set(self.selected.get());self.filter();self.select()
+            self.set_choice(self.current,self.selected.get());self.filter();self.select()
+
+    def set_choice(self,key,enabled):
+        self.variables[key].set(enabled)
+        if enabled:
+            preset=next(p for p in PRESETS if p.key==key)
+            for required in required_presets(preset):
+                if self.states[required.key][0] in ('normal','disabled','legacy','repair'):self.variables[required.key].set(True)
+        else:
+            for preset in PRESETS:
+                if self.variables[preset.key].get() and key in {p.key for p in required_presets(preset)}:self.variables[preset.key].set(False)
 
     def toggle(self):
         self.select()
