@@ -3,7 +3,7 @@ from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 import hashlib,json,os,struct,tempfile,unittest
-from fw_editor import EventData,suite_project,load_suite_project,export_suite
+from fw_editor import Binary,EditableTable,Field,Record,EventData,suite_project,load_suite_project,export_suite
 from script_data import ScriptDocument,compress,load_with_scripts
 from script_bytecode import Module,ScriptError,OPCODES,encoded
 from test_events import event_fixture
@@ -33,6 +33,21 @@ OWNED_FIXTURES=(
         '0009016f03000003610a2462656830010100056f03000c010100006f030000610a24626568320100006f030000612e52'
         '6573657276654a756d704e65787454696d656c696e6501000000066875620002087365656412756e72656c6174656400'
     ),
+)
+
+# Our synthetic quest program; no extracted game bytecode.
+QUEST_FIXTURE=bytes.fromhex(
+    '01000000000001660a496e74726f00405000000100000840413f3e003f8e0101030162003d003f62003d013f04036200'
+    '04023d02040240000304023d03640344003e023f0403620204023d02040240000304023d03640344003d043f04036202'
+    '04023d02040240000304023d03640344003d053f02010403620404023d02040240000304023d03640344003e033f3d06'
+    '3f3e013f0a0003026f0c737472696e6700036f03000201080f02011302001b02011f02002702012b0200340201380200'
+    '0172000466144576656e74537461727401000500000c48656164657266104576656e74456e6401000500000766185472'
+    '794669727374466c6167004041000100056f030000000500000007662052756e4974656d4761696e436f756e74010203'
+    '00404400000500000007016f030000076112456e747279466c6167010200056f03000c02010300000006687562611849'
+    '73416374697665466c6167020105010300000011610a2462656830010105010100006f030000610a2462656832010000'
+    '6f030000613852756e54616c6b53656c65637451756573744d656e754163636570740101030000000011611852756e51'
+    '75657374446f6e650101030000000011612e526573657276654a756d704e65787454696d656c696e6501000000110003'
+    '08736565640471310c7065726d697400'
 )
 
 def wrap_payload(payload):
@@ -67,7 +82,7 @@ def fixture():
 
 def execute_program(test,module,fi,args=(),flags=None,reads=(),unit_items=()):
     """Bounded opcode interpreter for stack/branch/native-call contracts only."""
-    stack=[];flags={} if flags is None else flags;advances=0;grants=[];freed=[];locals_={};result=None;pc=0;steps=0;objects={};live=set();allocated=0;equips=[]
+    stack=[];flags={} if flags is None else flags;advances=0;grants=[];freed=[];locals_={};result=None;pc=0;steps=0;objects={};live=set();allocated=0;equips=[];quest_events=[];context=False;boundaries=[]
     code=module.functions[fi].instructions
     while pc<len(code):
         steps+=1;test.assertLess(steps,50000);ins=code[pc];pc+=1
@@ -86,7 +101,11 @@ def execute_program(test,module,fi,args=(),flags=None,reads=(),unit_items=()):
         elif ins.name=='GETOBJ':
             test.assertEqual(ins.arguments,(0,));test.assertEqual(stack[-1],('slot',4));stack[-1]=objects.pop(4)
         elif ins.name=='CALLBND':
-            sig=module.bindings[ins.arguments[0]][0];obj=stack.pop()
+            sig=module.bindings[ins.arguments[0]][0]
+            if sig.name in ('EventStart','EventEnd'):
+                test.assertFalse(stack)
+                test.assertEqual(context,sig.name=='EventEnd');context=sig.name=='EventStart';boundaries.append(sig.name);continue
+            obj=stack.pop()
             test.assertEqual(obj[0],'owned');test.assertIn(obj[1],live);live.remove(obj[1]);text=obj[2]
             if sig.name=='TryFirstFlag':result=not flags.get(text,False);flags[text]=True
             elif sig.name=='IsFlagOn':result=flags.get(text,False)
@@ -110,6 +129,9 @@ def execute_program(test,module,fi,args=(),flags=None,reads=(),unit_items=()):
             elif label=='hub::IsAlreadyRead(string&)':result=stack.pop() in reads
             elif label=='string::opEquals(string&)':result=stack.pop()==stack.pop()
             elif label=='hub::ReserveJumpNextTimeline()':test.assertFalse(stack);advances+=1
+            elif label in ('hub::RunTalkSelectQuestMenuAccept(string)','hub::RunQuestDone(string)'):
+                test.assertTrue(context);obj=stack.pop();test.assertEqual(obj[0],'owned');test.assertIn(obj[1],live);live.remove(obj[1])
+                quest_events.append((label,obj[2]))
             elif label=='hub::unique::HasUnitItem(string&, string&)':
                 person=stack.pop();item=stack.pop();result=(person,item) in unit_items
             elif label=='hub::unique::ForceEquipItem(string&, string&)':
@@ -119,8 +141,8 @@ def execute_program(test,module,fi,args=(),flags=None,reads=(),unit_items=()):
             else:test.fail('Unexpected reviewed native call: '+label)
         else:
             test.assertEqual((ins.name,ins.arguments),('RET',(0,)));test.assertFalse(stack);test.assertEqual(pc,len(code))
-    test.assertFalse(stack);test.assertFalse(live);test.assertFalse(objects);test.assertEqual(freed,list(range(len(args))))
-    return dict(flags=flags,advances=advances,grants=grants,result=result,equips=equips)
+    test.assertFalse(stack);test.assertFalse(live);test.assertFalse(objects);test.assertFalse(context);test.assertEqual(freed,list(range(len(args))))
+    return dict(flags=flags,advances=advances,grants=grants,result=result,equips=equips,quest_events=quest_events,boundaries=boundaries)
 
 
 def run_program(test,module,fi):
@@ -147,6 +169,24 @@ class TutorialTests(unittest.TestCase):
                 self.assertEqual(fresh.build(),d.build())
                 d.tutorial_programs.clear();self.assertEqual(d.build(),d.raw)
 
+    def test_native_owned_quest_calls_and_event_context_without_game_data(self):
+        d=ScriptDocument(compress(wrap_payload(QUEST_FIXTURE)),'Script/hub/Synthetic.bin.zst')
+        operations=(('Intro','q-order','quest-accept','q1'),('Intro','q-done','quest-done','q1'),
+                    ('Intro','q-report','quest-accept','q1'),('Intro','q-next','quest-accept','q2'),
+                    ('Intro','gift','item',('permit',1)))
+        p=replace(td.BY_KEY['cai-trading'],key='synthetic-quest',script=d.filename,script_sha=d.sha256,rows=(),hook='Intro',
+                  flags=(),read_keys=('dummy',),native_calls=operations,scene_context=True)
+        with patch.dict(td.BY_KEY,{p.key:p}):
+            d.tutorial_programs.add(p.key);m=Module(d.build_raw());fi=td.script_target(d,p)
+            effect=execute_program(self,m,fi)
+            self.assertEqual(effect['quest_events'],[('hub::RunTalkSelectQuestMenuAccept(string)','q1'),
+                ('hub::RunQuestDone(string)','q1'),('hub::RunTalkSelectQuestMenuAccept(string)','q1'),
+                ('hub::RunTalkSelectQuestMenuAccept(string)','q2')])
+            self.assertEqual(effect['grants'],[('item',('permit',1))]);self.assertEqual(effect['boundaries'],['EventStart','EventEnd'])
+            self.assertFalse(execute_program(self,m,fi,flags=effect['flags'])['quest_events'])
+            clone=ScriptDocument(d.raw,d.filename);clone.load_project(json.loads(json.dumps(d.project())))
+            self.assertEqual(clone.build(),d.build())
+
     def test_timeline_bytes_unchanged_and_emitted_flags_stack_and_metadata(self):
         docs,p=fixture();table=docs['Events'];script=docs['Script'];v=table.views['timeline'];r=v.records[0]
         v.set(r,v.by_offset[0x5e],1850);v.set(r,v.by_offset[0x38],[['CUSTOM_CONDITION']]);before=table.build()
@@ -159,6 +199,75 @@ class TutorialTests(unittest.TestCase):
             self.assertEqual(td.apply_choices(docs,{p.key:True}),0)
             self.assertEqual(td.apply_choices(docs,{p.key:False}),1);self.assertEqual(script.build(),script.raw)
             self.assertEqual(table.build(),before)
+
+    def test_timeline_only_command_skip_without_scripts_roundtrip_and_conflicts(self):
+        docs,base=fixture();old=docs['Events'];v=old.views['timeline'];r=v.records[0]
+        commands=['*','通知(探索)','会話(SyntheticBefore)','コマンド強制(探索)','会話(SyntheticAfter)']
+        v.set(r,v.by_offset[0x21],16);v.set(r,v.by_offset[0x28],commands)
+        d=EventData(old.build(),old.filename);v=d.views['timeline'];r=v.records[0];docs={'Events':d}
+        p=replace(base,key='synthetic-map',script='',script_sha='',hook='',flags=(),
+            rows=((d.filename,r.pid,td.row_digest(v,r)),),omit_commands=('コマンド強制(探索)',))
+        v.set(r,v.by_offset[0x5e],1850);before=d.build()
+        with patch.dict(td.BY_KEY,{p.key:p}):
+            self.assertEqual(td.inspect_state(docs,p)[0],'normal');td.apply_choices(docs,{p.key:True})
+            self.assertEqual(td.inspect_state(docs,p)[0],'disabled');self.assertEqual(v.value(r,v.by_offset[0x28]),commands[:3]+commands[4:])
+            self.assertEqual(v.value(r,v.by_offset[0x21]),16);self.assertEqual(v.value(r,v.by_offset[0x5e]),1850)
+            fresh={'Events':EventData(d.raw,d.filename)};load_suite_project(fresh,json.loads(json.dumps(suite_project(docs))))
+            self.assertEqual(fresh['Events'].build(),d.build());self.assertEqual(td.inspect_state(fresh,p)[0],'disabled')
+            td.apply_choices(docs,{p.key:False});self.assertEqual(d.build(),before)
+            for bad in (replace(p,omit_commands=('missing',)),replace(p,omit_commands=p.omit_commands*2),replace(p,entry_args=('unexpected',))):
+                with patch.dict(td.BY_KEY,{p.key:bad}):
+                    snapshot=d.snapshot_edits();self.assertEqual(td.inspect_state(docs,bad)[0],'unavailable')
+                    with self.assertRaises(td.TutorialError):td.apply_choices(docs,{p.key:True})
+                    self.assertEqual(d.snapshot_edits(),snapshot)
+            snapshot=d.snapshot_edits()
+            with patch.object(d,'build',side_effect=ScriptError('Rejected table')):
+                with self.assertRaises(ScriptError):td.apply_choices(docs,{p.key:True})
+            self.assertEqual(d.snapshot_edits(),snapshot)
+            v.set(r,v.by_offset[0x28],commands+['CUSTOM'])
+            self.assertEqual(td.inspect_state(docs,p)[0],'unavailable')
+            with self.assertRaises(td.TutorialError):td.apply_choices(docs,{p.key:True})
+            self.assertEqual(v.value(r,v.by_offset[0x28]),commands+['CUSTOM'])
+
+    def test_timeline_command_replacement_order_roundtrip_validation_and_rollback(self):
+        docs,base=fixture();old=docs['Events'];v=old.views['timeline'];r=v.records[0]
+        commands=['NOTICE','BEFORE','FORCE','PROGRESS','AFTER']
+        v.set(r,v.by_offset[0x21],16);v.set(r,v.by_offset[0x28],commands)
+        d=EventData(old.build(),old.filename);v=d.views['timeline'];r=v.records[0];docs={'Events':d}
+        p=replace(base,key='synthetic-map-grant',script='',script_sha='',hook='',flags=(),
+            rows=((d.filename,r.pid,td.row_digest(v,r)),),replace_commands=(('FORCE',('GRANT','SECOND_GRANT')),))
+        for omit,expected in (((),['NOTICE','BEFORE','GRANT','SECOND_GRANT','PROGRESS','AFTER']),
+                              (('PROGRESS',),['NOTICE','BEFORE','GRANT','SECOND_GRANT','AFTER'])):
+            recipe=replace(p,omit_commands=omit)
+            with patch.dict(td.BY_KEY,{p.key:recipe}):
+                self.assertTrue(recipe.table_only);td.apply_choices(docs,{p.key:True})
+                self.assertEqual(v.value(r,v.by_offset[0x28]),expected)
+                for field in v.fields:
+                    if field.offset!=0x28:self.assertEqual(v.value(r,field),v.original(r,field))
+                fresh={'Events':EventData(d.raw,d.filename)}
+                load_suite_project(fresh,json.loads(json.dumps(suite_project(docs))))
+                self.assertEqual(fresh['Events'].build(),d.build());self.assertEqual(td.inspect_state(fresh,recipe)[0],'disabled')
+                td.apply_choices(docs,{p.key:False});self.assertEqual(d.build(),d.raw)
+                snapshot=d.snapshot_edits()
+                with patch.object(d,'build',side_effect=ScriptError('Rejected table')):
+                    with self.assertRaises(ScriptError):td.apply_choices(docs,{p.key:True})
+                self.assertEqual(d.snapshot_edits(),snapshot)
+        invalid=[replace(p,replace_commands=pair) for pair in (
+            (('MISSING',('GRANT',)),),p.replace_commands*2,(('FORCE',()),),(('FORCE',['GRANT']),),
+            (('FORCE',('',)),),(('FORCE',('LINE\nBREAK',)),),(('FORCE',('CR\rBREAK',)),),
+            (('FORCE',('NUL\0BREAK',)),),(('FORCE',(1,)),),(('FORCE',),),(([],('GRANT',)),))]
+        invalid.extend((replace(p,omit_commands=('FORCE',)),replace(p,entry_args=('UNEXPECTED',))))
+        for bad in invalid:
+            with self.subTest(bad=bad.replace_commands),patch.dict(td.BY_KEY,{p.key:bad}):
+                self.assertEqual(td.inspect_state(docs,bad)[0],'unavailable')
+                with self.assertRaises(td.TutorialError):td.apply_choices(docs,{p.key:True})
+                self.assertEqual(d.build(),d.raw)
+        with patch.dict(td.BY_KEY,{p.key:p}):
+            v.set(r,v.by_offset[0x28],commands+['CUSTOM'])
+            with self.assertRaises(td.TutorialError):td.apply_choices(docs,{p.key:True})
+            self.assertEqual(v.value(r,v.by_offset[0x28]),commands+['CUSTOM'])
+            script=fixture()[0]['Script'];script.tutorial_programs.add(p.key)
+            with self.assertRaisesRegex(ScriptError,'timeline-only'):script.build_raw()
 
     def test_source_custom_edits_and_unreviewed_programs_fail_closed(self):
         docs,p=fixture();script=docs['Script']
@@ -206,7 +315,7 @@ class TutorialTests(unittest.TestCase):
                 self.assertEqual((root/'mod/romfs/GameData'/docs['Events'].filename).read_bytes(),docs['Events'].raw)
                 self.assertFalse(list(root.rglob('*.backup-*')))
 
-    def test_all_unverified_catalog_entries_cannot_be_activated_from_projects_or_ui(self):
+    def test_unimplemented_catalog_entries_cannot_be_activated_from_projects_or_ui(self):
         self.assertEqual({p.group for p in td.PRESETS},set(range(1,29)))
         docs,p=fixture();before={k:d.snapshot_edits() for k,d in docs.items()}
         for preset in td.PRESETS:
@@ -240,17 +349,17 @@ class NativeTutorialTests(unittest.TestCase):
 
     def test_all_reviewed_recipes_preserve_native_timeline_bytes_and_unrelated_functions(self):
         docs,sources=self.docs();ready=[p for p in td.PRESETS if not p.blocked]
-        self.assertEqual(len(ready),25)
+        self.assertEqual(len(ready),33)
         original={k:d.raw for k,d in docs.items()}
         td.apply_choices(docs,{p.key:True for p in ready});td.validate_export(docs)
         for key,d in docs.items():
             if isinstance(d,EventData):
                 snapshot=d.snapshot_edits()
                 for p in ready:
-                    if not p.entry_args:continue
+                    if not (p.entry_args or p.table_only):continue
                     for owner,v,r in td.targets(docs,p):
                         if owner is not d:continue
-                        self.assertEqual(v.value(r,v.by_offset[0x28]),list(p.entry_args))
+                        self.assertEqual(v.value(r,v.by_offset[0x28]),td.patched_args(p,v,r))
                         v.set(r,v.by_offset[0x28],v.original(r,v.by_offset[0x28]))
                 self.assertEqual(d.build(),original[key]);d.restore_edits(snapshot);continue
             rebuilt=Module(d.build_raw())
@@ -269,7 +378,7 @@ class NativeTutorialTests(unittest.TestCase):
         self.assertEqual(suite_project(fresh),project)
         td.apply_choices(docs,{p.key:False for p in ready});td.validate_export(docs)
         for key,d in docs.items():
-            if d.filename==td.BRIDGE_SOURCE:self.assertTrue(d.modified);self.assertEqual(len(d.tutorial_programs),25)
+            if d.filename==td.BRIDGE_SOURCE:self.assertTrue(d.modified);self.assertEqual(len(d.tutorial_programs),28)
             else:self.assertEqual(d.build(),original[key])
         # Re-exporting restores old scene files and keeps access guards; no stale bypass payloads.
         with tempfile.TemporaryDirectory() as temp:
@@ -277,6 +386,73 @@ class NativeTutorialTests(unittest.TestCase):
             for d in docs.values():
                 target=Path(temp)/'romfs'/d.filename if isinstance(d,ScriptDocument) else Path(temp)/'romfs/GameData'/d.filename
                 self.assertEqual(target.read_bytes(),d.build())
+
+    def test_exploration_skips_only_forced_roll_and_retains_native_unlock_read_and_schedule_cues(self):
+        docs,_=self.docs();entries=[p for p in td.PRESETS if p.group==4]
+        self.assertEqual(len(entries),3);self.assertTrue(all(p.omit_commands and not p.blocked for p in entries))
+        original={k:d.build() for k,d in docs.items()}
+        td.apply_choices(docs,{p.key:True for p in entries});td.validate_export(docs)
+        for p in entries:
+            self.assertEqual(td.inspect_state(docs,p)[0],'disabled')
+            for owner,v,r in td.targets(docs,p):
+                expected=[c for c in v.original(r,v.by_offset[0x28]) if c!='コマンド強制(探索)']
+                self.assertEqual(v.value(r,v.by_offset[0x28]),expected)
+                for field in v.fields:
+                    if field.offset!=0x28:self.assertEqual(v.value(r,field),v.original(r,field))
+                parsed=EventData(owner.build(),owner.filename).views['timeline']
+                self.assertEqual(parsed.value(parsed.by_pid[r.pid],parsed.by_offset[0x28]),expected)
+                self.assertTrue(any(c.startswith('会話(') for c in expected))
+                if p.route!='Leda':self.assertIn('通知(探索)',expected)
+                else:self.assertIn('指南(地方興行2)',expected)
+        self.assertTrue(all(not d.modified for d in docs.values() if isinstance(d,ScriptDocument)))
+        clone,_=self.docs();load_suite_project(clone,json.loads(json.dumps(suite_project(docs))))
+        self.assertTrue(all(td.inspect_state(clone,p)[0]=='disabled' for p in entries))
+        td.apply_choices(docs,{p.key:False for p in entries})
+        for key,d in docs.items():self.assertEqual(d.build(),original[key])
+
+    def test_fixed_dispatch_and_recruitment_results_preserve_native_cues_and_schedule(self):
+        docs,sources=self.docs();entries=[td.BY_KEY[k] for k in ('theodora-dispatch','theodora-battalion-recruitment')]
+        self.assertTrue(all(p.table_only and not p.blocked for p in entries))
+        original={k:d.build() for k,d in docs.items()}
+        # Both grant grammars already occur in the original world-map event data.
+        cai=td.document(docs,'Timeline_Part1_Kai.bin').views['timeline']
+        self.assertIn('獲得(試供餌/2)',cai.original(cai.by_pid['timeline:0:152'],cai.by_offset[0x28]))
+        seo=td.document(docs,'Timeline_Part1_Seo.bin').views['timeline']
+        self.assertIn('軍団兵獲得(神官見習いたちE)',seo.original(seo.by_pid['timeline:0:107'],seo.by_offset[0x28]))
+        # Check that the retained fixed results refer to real definitions.
+        self.assertIn('IID_ヒシバナ',Binary((DATA/'Item.bin').read_bytes()).labels)
+        legions=Binary((DATA/'Legion.bin').read_bytes()).labels
+        for key in ('LID_神官見習いたちE','LID_下級戦士隊E'):self.assertIn(key,legions)
+        quest=Binary((DATA/'Subquest.bin').read_bytes())
+        row=Record('SQID_セオドラ篇_仕送り1',quest.labels['SQID_セオドラ篇_仕送り1'],0)
+        self.assertEqual(EditableTable.original(quest,row,Field('items','data[]',16,0x140)),['IID_ヒシバナ'])
+        self.assertEqual(EditableTable.original(quest,row,Field('count','u8',1,0x170)),5)
+        td.apply_choices(docs,{p.key:True for p in entries});td.validate_export(docs)
+        for p in entries:
+            self.assertEqual(td.inspect_state(docs,p)[0],'disabled')
+            for owner,v,r in td.targets(docs,p):
+                before=v.original(r,v.by_offset[0x28]);after=v.value(r,v.by_offset[0x28])
+                force,replacement=p.replace_commands[0]
+                self.assertEqual(after,[replacement[0] if c==force else c for c in before if c not in p.omit_commands])
+                self.assertEqual(after.count(replacement[0]),1)
+                self.assertFalse(any(c.startswith(('コマンド強制(','コマンド進行(')) for c in after))
+                if p.key=='theodora-dispatch':self.assertEqual(after.count('軍団兵獲得(神官見習いたちE)'),1)
+                for f in v.fields:
+                    if f.offset!=0x28:self.assertEqual(v.value(r,f),v.original(r,f))
+                parsed=EventData(owner.build(),owner.filename).views['timeline']
+                self.assertEqual(parsed.value(parsed.by_pid[r.pid],parsed.by_offset[0x28]),after)
+        # The native exit, regional restriction reset and free-action boundary remain.
+        for pid,kind in (('timeline:0:140',41),('timeline:0:141',32),('timeline:0:142',17)):
+            r=seo.by_pid[pid];self.assertEqual(seo.value(r,seo.by_offset[0x21]),kind)
+        self.assertTrue(all(not d.modified for d in docs.values() if isinstance(d,ScriptDocument)))
+        fresh,_=self.docs();load_suite_project(fresh,json.loads(json.dumps(suite_project(docs))))
+        self.assertTrue(all(td.inspect_state(fresh,p)[0]=='disabled' for p in entries))
+        with tempfile.TemporaryDirectory() as temp:
+            export_suite(fresh,sources,temp)
+            target=Path(temp)/'romfs/GameData/Timeline_Part1_Seo.bin'
+            self.assertEqual(target.read_bytes(),td.document(docs,'Timeline_Part1_Seo.bin').build())
+        td.apply_choices(docs,{p.key:False for p in entries})
+        for key,d in docs.items():self.assertEqual(d.build(),original[key])
 
     def test_read_guards_exact_keys_native_fallback_two_argument_and_semantics(self):
         docs,_=self.docs();ready=[p for p in td.PRESETS if not p.blocked]
@@ -360,7 +536,7 @@ class NativeTutorialTests(unittest.TestCase):
             self.assertFalse(execute_program(self,m,fi,flags=effect['flags'])['grants'])
             self.assertEqual(m.function_storage[fi],(4,((('string',''),4),),1,(),()))
             for owner,v,r in td.targets(docs,p):
-                self.assertEqual(v.value(r,v.by_offset[0x28]),list(p.entry_args))
+                self.assertEqual(v.value(r,v.by_offset[0x28]),td.patched_args(p,v,r))
                 for off in td.CONTROLLED:
                     if off!=0x28:self.assertEqual(v.value(r,v.by_offset[off]),v.original(r,v.by_offset[off]))
             d.tutorial_programs.remove(p.key)
@@ -403,6 +579,55 @@ class NativeTutorialTests(unittest.TestCase):
         td.apply_choices(docs,{p.key:False});self.assertEqual(d.build(),d.raw)
         bridge=td.document(docs,td.BRIDGE_SOURCE);bm=Module(bridge.build_raw());one,_=td.bridge_targets(bridge)
         for key in p.read_keys:self.assertTrue(execute_program(self,bm,one,(key,),effect['flags'])['result'])
+
+    def test_native_quest_transitions_keep_original_call_order_context_and_unique_rewards(self):
+        docs,_=self.docs();keys=('theodora-remittance','theodora-scouting-intro','leda-tavern')
+        td.apply_choices(docs,{key:True for key in keys});td.validate_export(docs)
+        for key in keys:
+            p=td.BY_KEY[key];d=td.document(docs,p.script);m=Module(d.build_raw());fi=td.script_target(d,p)
+            effect=execute_program(self,m,fi);original=[]
+            hooks=(p.hook,'MID_LGV_1LED_TG14_001_m03') if key=='leda-tavern' else (p.hook,)
+            for hook in hooks:
+                f=next(f for f in d.module.functions if f.signature.name==hook)
+                for j,ins in enumerate(f.instructions):
+                    if ins.name=='CALLSYS' and d.module.describe(ins) in ('hub::RunTalkSelectQuestMenuAccept(string)','hub::RunQuestDone(string)'):
+                        literal=next(a for a in reversed(f.instructions[:j]) if a.name=='PGA')
+                        original.append((d.module.describe(ins),d.module.constants[literal.arguments[0]>>1].text))
+            self.assertEqual(effect['quest_events'],original)
+            self.assertEqual(effect['boundaries'],['EventStart','EventEnd'])
+            self.assertEqual(effect['advances'],int(key!='theodora-scouting-intro'))
+            repeated=execute_program(self,m,fi,flags=effect['flags'])
+            self.assertFalse(repeated['quest_events']);self.assertFalse(repeated['grants'])
+            if key=='theodora-remittance':
+                self.assertTrue(effect['flags']['機能開放_仕送り']);self.assertTrue(effect['flags']['機能開放_冒険手帳_クエスト一覧'])
+            else:self.assertTrue(effect['flags']['機能開放_冒険手帳_名声の記録'])
+            if key=='theodora-scouting-intro':self.assertEqual(effect['grants'],[('item',('サラミスの菓子',1))])
+            if key=='leda-tavern':
+                self.assertIn('MID_LGV_1LED_TG14_001_m04',p.read_keys)
+                for flag in ('機能開放_拠点興行','機能開放_酒場興行','機能開放_冒険手帳_クエスト一覧'):self.assertTrue(effect['flags'][flag])
+                self.assertNotIn('機能開放_劇場',effect['flags'])
+                # The later, reused tavern callback must remain byte-for-byte semantic original.
+                other=next(i for i,f in enumerate(m.functions) if f.signature.name==hooks[1])
+                self.assertEqual([(i.opcode,i.arguments) for i in m.functions[other].instructions],[(i.opcode,i.arguments) for i in d.module.functions[other].instructions])
+        fresh,_=self.docs();load_suite_project(fresh,json.loads(json.dumps(suite_project(docs))))
+        self.assertEqual(suite_project(docs),suite_project(fresh))
+        original_tables={k:d.raw for k,d in docs.items() if isinstance(d,EventData)}
+        td.apply_choices(docs,{key:False for key in keys})
+        for k,raw in original_tables.items():self.assertEqual(docs[k].build(),raw)
+        for key in keys:
+            d=td.document(docs,td.BY_KEY[key].script);self.assertEqual(d.build(),d.raw)
+
+    def test_quest_guard_resumes_after_completed_steps_and_context_cannot_be_removed(self):
+        docs,_=self.docs();p=td.BY_KEY['leda-tavern'];td.apply_choices(docs,{p.key:True})
+        d=td.document(docs,p.script);m=Module(d.build_raw());fi=td.script_target(d,p)
+        first=p.native_calls[0][1]
+        effect=execute_program(self,m,fi,flags={first:True})
+        self.assertEqual(effect['quest_events'],[
+            ('hub::RunQuestDone(string)','SQID_レダ篇_酒場興行1'),
+            ('hub::RunTalkSelectQuestMenuAccept(string)','SQID_レダ篇_酒場興行1'),
+            ('hub::RunTalkSelectQuestMenuAccept(string)','SQID_レダ篇_地方興行1')])
+        broken=replace(p,scene_context=False)
+        with patch.dict(td.BY_KEY,{p.key:broken}),self.assertRaisesRegex(ScriptError,'event context'):d.build_raw()
 
     def test_legacy_migration_restore_and_export_rejection(self):
         docs,sources=self.docs();keys=list(td.LEGACY)

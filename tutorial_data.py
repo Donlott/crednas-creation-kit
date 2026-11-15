@@ -1,6 +1,6 @@
 """Source-guarded tutorial plans; never substitute a different timeline event type.
 
-Unverified native facility/quest effects deliberately have no executable recipe.
+Unimplemented native facility/quest paths deliberately have no executable recipe.
 Projects store only reviewed recipe IDs, never arbitrary replacement programs.
 """
 from dataclasses import dataclass
@@ -34,6 +34,12 @@ class Preset:
     advance:bool=True
     native_calls:tuple=()
     entry_args:tuple=()
+    scene_context:bool=False
+    omit_commands:tuple=()
+    replace_commands:tuple=()
+
+    @property
+    def table_only(self):return bool(self.omit_commands or self.replace_commands)
 
 
 PRESETS=tuple(Preset(**p) for p in CATALOG)
@@ -85,13 +91,40 @@ def legacy_values(preset):
     return {0x21:kind,0x28:[argument],0x48:[],0x70:'',0x90:'',0x98:0,0xa0:'',0xb0:[],0xc0:''}
 
 
+def patched_args(preset,view,row):
+    """Change only reviewed arguments; retain native event type and scheduling."""
+    original=view.original(row,view.by_offset[0x28])
+    if preset.table_only:
+        if preset.entry_args or view.original(row,view.by_offset[0x21])!=16:
+            raise TutorialError('Command edits require a native world-map event.')
+        replacements={}
+        for pair in preset.replace_commands:
+            if not isinstance(pair,tuple) or len(pair)!=2:
+                raise TutorialError('Invalid reviewed command replacement.')
+            old,new=pair
+            if not isinstance(old,str) or not old or old in replacements or not isinstance(new,tuple) or not new or any(not isinstance(c,str) or not c or any(x in c for x in ('\0','\n','\r')) for c in new):
+                raise TutorialError('Invalid or duplicated reviewed command replacement.')
+            replacements[old]=new
+        keys=tuple(preset.omit_commands)+tuple(replacements)
+        if len(set(keys))!=len(keys) or any(original.count(cmd)!=1 for cmd in keys):
+            raise TutorialError('The reviewed compulsory command is missing or duplicated.')
+        result=[]
+        for command in original:
+            if command in replacements:result.extend(replacements[command])
+            elif command not in preset.omit_commands:result.append(command)
+        if not result:raise TutorialError('A command edit must retain the native event cues.')
+        return result
+    return list(preset.entry_args) if preset.entry_args else original
+
+
 def table_state(documents,preset):
     legacy=False;hooked=False
     for _,view,row in targets(documents,preset):
         current={off:view.value(row,view.by_offset[off]) for off in CONTROLLED}
         original={off:view.original(row,view.by_offset[off]) for off in CONTROLLED}
+        patched={**original,0x28:patched_args(preset,view,row)} if preset.entry_args or preset.table_only else None
         if current==original:continue
-        if preset.entry_args and current=={**original,0x28:list(preset.entry_args)}:hooked=True;continue
+        if patched is not None and current==patched:hooked=True;continue
         if preset.key in LEGACY and current==legacy_values(preset):legacy=True
         else:raise TutorialError('The tutorial timeline row has custom action/interval edits. Resolve them in Events first.')
     return 'legacy' if legacy else 'hooked' if hooked else 'normal'
@@ -127,6 +160,8 @@ def inspect_state(documents,preset):
     if preset.blocked:return 'blocked',preset.blocked
     try:
         state=table_state(documents,preset)
+        if preset.table_only:
+            return ('disabled','Reviewed world-map command edits enabled; native cues and scheduling data are retained.') if state=='hooked' else ('normal','A reviewed command skip is available. See the retained rewards and omitted activity costs in the description.')
         doc=document(documents,preset.script);script_targets(doc,preset)
         bridge=document(documents,BRIDGE_SOURCE) if preset.read_keys else None
         if bridge:bridge_targets(bridge)
@@ -144,7 +179,7 @@ def load_sources(documents,sources,base):
     """Read only reviewed original scripts beside GameData, without following escapes."""
     from script_data import ScriptDocument
     root=Path(base).resolve().parent;pending=[]
-    names={p.script for p in PRESETS if not p.blocked}
+    names={p.script for p in PRESETS if not p.blocked and p.script}
     if any(p.read_keys for p in PRESETS if not p.blocked):names.add(BRIDGE_SOURCE)
     for filename in sorted(names):
         if any(d.filename==filename for d in documents.values()):continue
@@ -189,18 +224,25 @@ def programs_for_document(doc):
                and s.object_type==receiver and not s.templates and s.traits==traits]
         if len(found)!=1:raise ScriptError('Required native API is missing or has a different signature: '+name)
         return found[0]
-    def owned_call(a,name,text,tail=(),result=void):
-        parameters=((5,('string',''),0),)+tuple((68,None,0) for value in tail)
-        found=[i for i,(s,source) in enumerate(m.bindings) if s and s.kind==5 and s.name==name and s.result==result
-               and s.parameters==parameters and s.inout==(0,)*len(parameters) and not s.object_type and not s.namespace and not s.traits and not s.templates]
-        if len(found)!=1:raise ScriptError('Required reviewed import is missing or differs: '+name)
+    def push_owned(a,text,tail=()):
         types=[i for i,t in enumerate(m.used_type_infos) if t==('string','')]
         if len(types)!=1:raise ScriptError('Required owned-string type is missing or ambiguous.')
         constructor=api('string::$beh0(string&)',(string,),(1,),void,('string',''))
         for value in reversed(tail):a.emit('PshC4',value)
         # ALLOC reserves reference zero for an absent constructor.
         a.emit('PSF',4);a.emit('PGA',constant(text));a.emit('ALLOC',types[0],constructor+1)
-        a.emit('VAR',4);a.emit('GETOBJ',0);a.emit('CALLBND',found[0]);owned_programs.add(a)
+        a.emit('VAR',4);a.emit('GETOBJ',0);owned_programs.add(a)
+    def imported(name,parameters=(),result=void):
+        found=[i for i,(s,source) in enumerate(m.bindings) if s and s.kind==5 and s.name==name and s.result==result
+               and s.parameters==parameters and s.inout==(0,)*len(parameters) and not s.object_type and not s.namespace and not s.traits and not s.templates]
+        if len(found)!=1:raise ScriptError('Required reviewed import is missing or differs: '+name)
+        return found[0]
+    def owned_call(a,name,text,tail=(),result=void):
+        parameters=((5,('string',''),0),)+tuple((68,None,0) for value in tail)
+        target=imported(name,parameters,result);push_owned(a,text,tail);a.emit('CALLBND',target)
+    def quest_call(a,kind,text):
+        label={'quest-accept':'hub::RunTalkSelectQuestMenuAccept(string)','quest-done':'hub::RunQuestDone(string)'}[kind]
+        target=api(label,((5,('string',''),0),),(0,));push_owned(a,text);a.emit('CALLSYS',target)
     def set_flag(a,flag,value):
         if any(s and s.label=='hub::EntryFlag(string&, bool)' for s in m.used_functions):
             a.emit('PshC4',int(value));a.emit('PGA',constant(flag))
@@ -217,20 +259,26 @@ def programs_for_document(doc):
     for key in sorted(doc.tutorial_programs):
         internal=key.startswith(BRIDGE_PREFIX);public=key[len(BRIDGE_PREFIX):] if internal else key
         preset=BY_KEY.get(public)
-        if preset is None or preset.blocked:raise ScriptError('Unknown or unverified tutorial recipe: '+key)
+        if preset is None or preset.blocked:raise ScriptError('Unknown or unfinished tutorial recipe: '+key)
+        if preset.table_only:raise ScriptError('A timeline-only recipe cannot be installed in a script.')
         if internal:
             if not preset.read_keys:raise ScriptError('This recipe has no read compatibility checks.')
             bridge_targets(doc);bridges.append(preset);continue
         for fi in script_targets(doc,preset):
             if fi in programs:raise ScriptError('Tutorial recipes overlap the same function.')
             a=Assembly();a.emit('SUSPEND');hook=m.functions[fi].signature.name
+            if preset.scene_context:a.emit('CALLBND',imported('EventStart'));a.emit('SUSPEND')
             for n,(call_hook,guard,kind,value) in enumerate(preset.native_calls):
                 if call_hook!=hook:continue
-                if kind in ('item','single-item','equip'):
+                if kind=='flag':set_flag(a,*value);continue
+                if kind in ('item','single-item','equip','quest-accept','quest-done'):
                     first_only(a,guard,'reward_done_'+str(n))
                     if kind=='item':
                         item,count=value;owned_call(a,'RunItemGainCount',item,(count,))
                     elif kind=='single-item':owned_call(a,'RunItemGain',value)
+                    elif kind in ('quest-accept','quest-done'):
+                        if not preset.scene_context:raise ScriptError('Quest transitions require their original event context.')
+                        quest_call(a,kind,value)
                     else:
                         person,item=value;a.emit('PGA',constant(item));a.emit('PGA',constant(person))
                         a.emit('CALLSYS',api('hub::unique::HasUnitItem(string&, string&)',(string,string),(3,3),boolean))
@@ -255,6 +303,7 @@ def programs_for_document(doc):
                 set_flag(a,marker(preset.key+'_stage'+str(stage+1)),True)
             elif preset.read_keys:set_flag(a,marker(preset.key),True)
             if preset.advance:a.emit('CALLSYS',api('hub::ReserveJumpNextTimeline()'));a.emit('SUSPEND')
+            if preset.scene_context:a.emit('CALLBND',imported('EventEnd'));a.emit('SUSPEND')
             a.emit('RET',0);code=a.finish()
             programs[fi]=ReviewedProgram(code,4,(4,)) if a in owned_programs else code
     if bridges:
@@ -286,17 +335,18 @@ def apply_choices(documents,choices):
     for key,disabled in choices.items():
         preset=BY_KEY[key];state,reason=inspect_state(documents,preset)
         if state not in ('normal','disabled','legacy','repair'):raise TutorialError(preset.title+': '+reason)
-        doc=document(documents,preset.script)
+        doc=None if preset.table_only else document(documents,preset.script)
         if state not in ('legacy','repair') and disabled==(state=='disabled'):continue
         refs=targets(documents,preset);bridge=document(documents,BRIDGE_SOURCE) if preset.read_keys else None
         plans.append((preset,doc,bridge,disabled,state,refs));changed+=1
-        for owner in [doc]+([bridge] if bridge else [])+[o for o,v,r in refs]:snapshots.setdefault(owner,owner.snapshot_edits())
+        for owner in ([doc] if doc else [])+([bridge] if bridge else [])+[o for o,v,r in refs]:snapshots.setdefault(owner,owner.snapshot_edits())
     try:
         for preset,doc,bridge,disabled,state,refs in plans:
             for _,view,row in refs:
                 if state=='legacy':
                     for off in CONTROLLED:view.set(row,view.by_offset[off],view.original(row,view.by_offset[off]))
-                if preset.entry_args:view.set(row,view.by_offset[0x28],list(preset.entry_args) if disabled else view.original(row,view.by_offset[0x28]))
+                if preset.entry_args or preset.table_only:view.set(row,view.by_offset[0x28],patched_args(preset,view,row) if disabled else view.original(row,view.by_offset[0x28]))
+            if doc is None:continue
             if disabled:
                 doc.tutorial_programs.add(preset.key)
                 if bridge:bridge.tutorial_programs.add(BRIDGE_PREFIX+preset.key)
@@ -313,6 +363,9 @@ def apply_choices(documents,choices):
 def validate_export(documents):
     """Reject obsolete shortcuts and missing unlock guards."""
     for preset in PRESETS:
+        # Command-only recipes are ordinary source-guarded argument edits. They
+        # add no script/bridge dependency; unrelated custom event edits remain valid.
+        if preset.table_only:continue
         if preset.key in LEGACY and any(d.filename==preset.rows[0][0] for d in documents.values()):
             try:state=table_state(documents,preset)
             except TutorialError:state=None

@@ -6,7 +6,7 @@ from tutorial_data import PRESETS,inspect_state,apply_choices,load_sources
 
 
 LABELS={'normal':'Off · testable','disabled':'On · experimental','legacy':'Migration needed','repair':'Unlock checks needed',
-        'blocked':'Needs tracing','unavailable':'Source / edit conflict'}
+        'blocked':'Not implemented','unavailable':'Source / edit conflict'}
 
 
 def open_editor(app):
@@ -30,11 +30,11 @@ class TutorialEditor(tk.Toplevel):
         self.variables={p.key:tk.BooleanVar() for p in PRESETS};self.states={}
         self.search=tk.StringVar();self.route=tk.StringVar(value='All routes');self.selected=tk.BooleanVar()
         self.heading=tk.StringVar(value='Select a sequence');self.detail=tk.StringVar();self.reason=tk.StringVar()
-        self.notice=tk.StringVar(value='28 groups · 39 route-specific entries. Unverified completion paths are unavailable.')
+        self.notice=tk.StringVar(value=f'28 groups · {len(PRESETS)} entries · {sum(not p.blocked for p in PRESETS)} experimental bypasses implemented.')
         body=ttk.Frame(self,padding=10);body.pack(fill='both',expand=True)
         ttk.Label(body,text='Forced tutorials · progression checks',style='Title.TLabel').pack(anchor='w')
-        self.intro_label=ttk.Label(body,text='Testable options retain native timeline events and scheduling fields. File validation cannot guarantee runtime clock or flag behavior. '
-                  'Unlock checks remain in exported projects when a bypass is turned off, for saves that skipped the introduction. Unresolved sequences remain unavailable.',wraplength=930)
+        self.intro_label=ttk.Label(body,text='Implemented bypasses are available for testing. They retain native timeline scheduling data; runtime clock and flag behavior still need in-game checks. '
+                  'Unlock checks remain in exported projects when a bypass is turned off, for saves that skipped the introduction. Entries marked Not implemented have no bypass yet.',wraplength=930)
         self.intro_label.pack(fill='x',pady=(5,8))
         bar=ttk.Frame(body);bar.pack(fill='x',pady=(0,5))
         ttk.Entry(bar,textvariable=self.search).pack(side='left',fill='x',expand=True,padx=(0,6))
@@ -93,7 +93,7 @@ class TutorialEditor(tk.Toplevel):
         state,reason=self.states[p.key];self.selected.set(self.variables[p.key].get())
         self.check.configure(state='normal' if state in ('normal','disabled','legacy','repair') else 'disabled')
         self.heading.set(f'#{p.group} · {p.route} · '+p.title)
-        self.detail.set(p.description or 'No executable completion recipe is supplied until the dependencies below are accounted for.')
+        self.detail.set(p.description or 'This sequence is listed for reference; its bypass has not been implemented yet.')
         self.reason.set(reason)
 
     def choose(self):
