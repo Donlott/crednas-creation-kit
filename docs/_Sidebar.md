@@ -15,6 +15,7 @@
 - [Profiles & Affiliations](Profiles-and-affiliations.md)
 - [Facilities & Rewards](Facilities-and-rewards.md)
 - [Shop & Loot](Shops-and-loot.md)
+- [Buyable mounts](Buyable-mounts.md)
 - [Battle deployment](Deployment.md)
 - [Legion](Legion.md)
 - [Progression & Difficulty](Progression-and-difficulty.md)

@@ -1005,38 +1005,63 @@ def load_suite_project(documents, project):
 
 def export_suite(documents, sources, directory):
     from tutorial_data import validate_export
+    from mount_data import MountPatch, GENERATED_PATHS, build_outputs, digest
     validate_export(documents)
     validate_new_item_ids(documents)
     directory = Path(directory)
     manifest = directory/'suite-edits.json'
-    owned = set()
+    owned = set();generated_owned={}
     if manifest.exists():
         try:
             content=json.loads(manifest.read_text(encoding='utf8'))
             if content.get('format') not in ('fw-hacking-suite-project-v1','fw-hacking-suite-project-v2'):raise ValueError()
             owned=set(content['documents'])
+            generated_owned=content.get('generated_outputs',{})
+            if not isinstance(generated_owned,dict) or set(generated_owned)-GENERATED_PATHS or any(not isinstance(v,str) or len(v)!=64 for v in generated_owned.values()):raise ValueError()
         except (OSError,ValueError,KeyError,TypeError):
             raise DataError('The existing suite manifest is invalid. Choose a separate output folder.')
     elif (directory/'character-edits.json').is_file():
         owned={'Person.bin'}
     if owned-{doc.filename for doc in documents.values()}:
         raise DataError('This mod contains sources that are not loaded. Open its suite project, load the required GameData/scripts, or choose a new output folder.')
-    planned=[]
+    overlay=build_outputs(documents)
+    planned=[];generated_new={}
+    protected=[Path(source).resolve() for source in sources.values()]
+    protected.extend(d.message_path.resolve() for d in documents.values() if isinstance(d,MountPatch))
+    # Reject edits to previously generated files before writing any outputs. A
+    # disabled patch only removes files whose exact previous bytes we still own.
+    for name,sha in generated_owned.items():
+        target=directory/name
+        if not target.resolve().is_relative_to(directory.resolve()):raise DataError('Generated patch output escapes the mod folder.')
+        if target.exists() and digest(target.read_bytes())!=sha:raise DataError('A generated patch file was edited outside CCK. Choose a separate mod folder: '+name)
     for module,doc in documents.items():
         from script_data import ScriptDocument, valid_source as valid_script_source
+        if isinstance(doc,MountPatch):continue
         if isinstance(doc,ScriptDocument):
             if not valid_script_source(doc.filename):raise DataError('Invalid script output path.')
             target=directory/'romfs'/doc.filename
         else:target=directory/'romfs/GameData'/doc.filename
-        if any(target.resolve()==Path(source).resolve() for source in sources.values()):
+        if target.resolve() in protected:
             raise DataError('Choose a separate mod folder, not the original game folder.')
         if target.exists() and doc.filename not in owned:
             raise DataError(f'{doc.filename} already exists and is not owned by this editor export.')
-        planned.append((target,doc.build()))
+        relative=target.relative_to(directory).as_posix()
+        planned.append((target,overlay.pop(relative) if relative in overlay else doc.build()))
+    for name,raw in overlay.items():
+        if name not in GENERATED_PATHS:raise DataError('Unsupported generated patch output.')
+        target=directory/name
+        if not target.resolve().is_relative_to(directory.resolve()) or target.resolve() in protected:raise DataError('Choose a separate output folder, away from original sources.')
+        if target.exists() and name not in generated_owned:raise DataError('Generated output already exists and is not owned by this CCK export: '+name)
+        planned.append((target,raw));generated_new[name]=digest(raw)
     # Validate and build every table before changing any output file.
     for target,raw in planned:
         atomic_write(target,raw)
-    atomic_write(manifest,json.dumps(suite_project(documents),ensure_ascii=False,indent=2).encode('utf8'))
+    for name in generated_owned.keys()-generated_new.keys():
+        target=directory/name
+        if target.exists():target.unlink()
+    project=suite_project(documents)
+    if generated_new:project['generated_outputs']=generated_new
+    atomic_write(manifest,json.dumps(project,ensure_ascii=False,indent=2).encode('utf8'))
     return [target for target,_ in planned]
 
 
@@ -1279,6 +1304,7 @@ def main():
             tools_menu.add_command(label='Translation glossary…', command=self.glossary)
             tools_menu.add_command(label='Script editor…', command=lambda:__import__('script_ui').open_editor(self))
             tools_menu.add_command(label='Forced tutorials…', command=lambda:__import__('tutorial_ui').open_editor(self))
+            tools_menu.add_command(label='Buyable mounts…', command=lambda:__import__('mount_ui').open_editor(self))
             menu.add_cascade(label='Tools', menu=tools_menu)
             self.configure(menu=menu)
             top = ttk.Frame(self, padding=(8, 6)); top.pack(fill='x')

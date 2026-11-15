@@ -29,6 +29,8 @@ Start with [Getting started](Getting-started.md), then read [Projects and export
 
 [Forced tutorials](Forced-tutorials.md) provides experimental, individually selectable bypasses through **Tools → Forced tutorials…**.
 
+[Buyable mounts](Buyable-mounts.md) provides experimental direct horse sales through **Tools → Buyable mounts…**.
+
 ## Read labels literally
 
 The editor exposes stored values and supported links. Fields marked **raw**, unknown categories and unnamed stat blocks are not fully interpreted. A reference list shows observed stored references, not a simulation of runtime behavior. Structural file validation does not replace in-game testing.

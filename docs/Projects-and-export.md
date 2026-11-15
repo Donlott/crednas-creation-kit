@@ -12,6 +12,8 @@ Choose **Export mod…** and select a separate output folder. The exporter valid
 
 Keep the source data, project and mod output separate. A project is the editable record of your work; an exported mod is the result you test with your own game setup. Exporting does not test gameplay, events or save compatibility.
 
+The experimental [Buyable mounts](Buyable-mounts.md) option also remembers its executable/message sources and generates an ExeFS patch. Disabling it and re-exporting removes only its fingerprint-matched generated outputs; external changes to those outputs are refused.
+
 ## New records and references
 
 Creation controls are available for characters, classes, items and learning lists/entries. Other modules edit their existing supported records. Original identities and slots stay fixed.

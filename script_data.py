@@ -142,6 +142,8 @@ def load_with_scripts(documents,sources,base,project,loader=None):
         loader=load_suite_project
     trial_docs=dict(documents);trial_sources=dict(sources)
     prepare_project(trial_docs,trial_sources,base,project)
+    from mount_data import prepare_project as prepare_mounts
+    prepare_mounts(trial_docs,trial_sources,project)
     loader(trial_docs,project)
     documents.clear();documents.update(trial_docs)
     sources.clear();sources.update(trial_sources)
