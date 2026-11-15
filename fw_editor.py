@@ -16,6 +16,12 @@ import sys
 import tempfile
 from dataclasses import dataclass
 
+# Direct Linux/desktop launches execute this file as __main__. Tool modules
+# import fw_editor; bind both names to the same module before defining models so
+# those imports cannot create a second, incompatible set of table classes.
+if __name__ == '__main__':
+    sys.modules['fw_editor'] = sys.modules[__name__]
+
 from branding import APP_NAME
 from localization import Translator, JAPANESE
 from asset_index import AssetIndex

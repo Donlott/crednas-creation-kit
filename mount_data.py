@@ -105,8 +105,44 @@ def source_tables(documents):
     from fw_editor import Item,Job,Skill,DataError
     def find(kind,name):return next((d for d in documents.values() if isinstance(d,kind) and d.filename==name),None)
     item=find(Item,'Item.bin');job=find(Job,'Job.bin');skills=find(Skill,'Skill.bin')
-    if item is None or job is None or skills is None:raise DataError('Open the original Item.bin, Job.bin and Skill.bin tables before enabling Buyable mounts.')
+    missing=[name for name,doc in (('Item.bin',item),('Job.bin',job),('Skill.bin',skills)) if doc is None]
+    if missing:raise DataError('Buyable mounts is missing '+', '.join(missing)+'. Use Open data… to choose your extracted GameData folder; the tool loads these tables automatically.')
     return item,job,skills
+
+
+def load_sources(documents,sources,base):
+    """Load missing dependencies from the chosen data folder, transactionally.
+
+    Keep existing document objects and edits. Read and validate all missing
+    tables before adding any of them to the session.
+    """
+    from fw_editor import Item,Job,Skill,DataError
+    required=(('Items',Item),('Classes',Job),('Skills',Skill));missing=[]
+    for module,kind in required:
+        existing=[d for d in documents.values() if d.filename==kind.filename]
+        if existing:
+            if len(existing)!=1 or not isinstance(existing[0],kind):raise DataError('The loaded '+kind.filename+' has an unsupported or duplicate table layout. Reopen your original game data folder.')
+        else:missing.append((module,kind))
+    if not missing:return 0
+    if not base:raise DataError('Use Open data… to choose your extracted game folder first. Buyable mounts will find its required tables automatically.')
+    base=Path(base).resolve()
+    if base.is_file():base=base.parent
+    candidates=(base,base/'GameData',base/'romfs/GameData')
+    directory=next((p for p in candidates if all((p/kind.filename).is_file() for _,kind in missing)),None)
+    if directory is None:
+        closest=max(candidates,key=lambda p:sum((p/kind.filename).is_file() for _,kind in missing))
+        names=[kind.filename for _,kind in missing if not (closest/kind.filename).is_file()]
+        raise DataError('The selected game folder is missing '+', '.join(names)+' (looked in '+str(closest)+'). Use Open data… to choose a complete extracted GameData folder; no separate file-opening step is needed.')
+    pending=[]
+    for module,kind in missing:
+        source=(directory/kind.filename).resolve()
+        try:doc=kind(source.read_bytes())
+        except (OSError,ValueError,struct.error) as exc:raise DataError('Could not load '+str(source)+': '+str(exc)) from exc
+        key=module if module not in documents else module+' · '+kind.filename
+        if key in documents or key in sources:raise DataError('A session entry already uses '+key+'. Reopen your original game data folder.')
+        pending.append((key,doc,source))
+    for key,doc,source in pending:documents[key]=doc;sources[key]=source
+    return len(pending)
 
 
 def catalog_for(documents,patch):

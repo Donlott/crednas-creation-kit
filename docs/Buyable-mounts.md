@@ -8,7 +8,7 @@ Every skill pair reachable by a saved mount seed receives its own shop entry. Th
 
 ## Configure and export
 
-1. Open your original data, including the item, class and skill tables.
+1. Use **Open data…** to choose your extracted game folder or its **GameData** folder. You do not need to open individual tables: CCK finds the item, class and skill files automatically. If the session contains only some of them, opening this tool loads the missing tables without replacing existing edits. If a file is actually missing or unreadable, the error identifies its name and the folder checked.
 2. Open **Tools → Buyable mounts…** and select **Enable direct mount sales**.
 3. Select your original `exefs/main` and English `Item` message bank. Keep the English `Ride` and `Skill` message banks beside it. Only the specifically verified, unmodified executable is accepted.
 4. Refresh the catalog if needed. Search for a mount or skill, select a row, enter its gold price and choose **Set price**. **Apply** also keeps the currently selected row’s pending price. **Reset prices** restores catalog defaults.

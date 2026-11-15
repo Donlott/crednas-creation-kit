@@ -4,17 +4,21 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import ttk,filedialog,messagebox
 from branding import APP_NAME
-from mount_data import MountPatch,MODULE,source_tables,build_outputs
+from mount_data import MountPatch,MODULE,source_tables,load_sources,build_outputs
 from mount_catalog import catalog
 
 
 def open_editor(app):
-    if not app.documents:app.error('Open the original game data first.');return
+    if not app.documents and not getattr(app,'data_directory',None):app.error('Use Open data… to choose your extracted game folder first.');return
     if not app.apply(True):return
     existing=getattr(app,'mount_window',None)
     if existing and existing.winfo_exists():existing.lift();return existing
     try:
-        source_tables(app.documents)
+        clean=app.session_state()==app.saved_state
+        loaded=load_sources(app.documents,app.sources,app.data_directory)
+        if loaded:
+            app.suggestion_cache.clear();app.rebuild_translator()
+        if clean:app.saved_state=app.session_state()
         window=MountEditor(app);app.mount_window=window;return window
     except Exception as exc:app.error(str(exc))
 
