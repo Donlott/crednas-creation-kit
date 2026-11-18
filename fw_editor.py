@@ -27,7 +27,7 @@ from localization import Translator, JAPANESE
 from asset_index import AssetIndex
 from item_index import reference_ids
 
-VERSION = '1.02'
+VERSION = '1.03'
 MESSAGE_TABLES = ('Person','Job','Skill','Item','Clan','Roster','ScoutInfo','System_Facility','System_Notice','System_Hub','System_Gmap','System_Dungeon','System','BattleTitle','Spot','Divination','Shop','Legion')
 FORMATS = {'u8': 'B', 's8': 'b', 'b8': 'B', 'bool': 'B', 'u16': 'H',
            's16': 'h', 'b16': 'H', 'u32': 'I', 's32': 'i', 'b32': 'I', 'int':'i'}

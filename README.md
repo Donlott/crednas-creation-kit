@@ -2,7 +2,7 @@
 
 **This program cannot run or emulate games. It only edits files that you provide.**
 
-# Credna's Creation Kit 1.02
+# Credna's Creation Kit 1.03
 
 A Windows and Linux file editor for **Fortune's Weave**, supporting game version **1.00**.
 

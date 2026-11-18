@@ -8,6 +8,15 @@ import sys
 from script_bytecode import Module, ScriptError
 
 
+def script_paths(root):
+    """Discover the same sources in both script entry points, preferring compressed files."""
+    root=Path(root)
+    if not root.is_dir():return ()
+    paths=set(root.rglob('*.bin.zst')) | set(root.rglob('*.bin'))
+    return tuple(sorted(p for p in paths if p.is_file() and not
+                        (p.suffix=='.bin' and p.with_suffix('.bin.zst').is_file())))
+
+
 def valid_source(filename):
     if not isinstance(filename,str) or '\\' in filename:return False
     path=PurePosixPath(filename)

@@ -157,10 +157,11 @@ def cape_links(app,parent):
 def compiled_scripts(app,parent):
     from script_inspector import inspect
     from script_ui import open_editor
+    from script_data import script_paths
     from fw_editor import decompress
     from aid_ui import readonly_text
     ttk.Label(parent,text='ASF wrapper/import inspection only. Identifier runs are evidence, not decoded commands or executed-call counts. Use Open script editor to edit parsed constants and supported instructions.',style='Hint.TLabel',wraplength=730).pack(anchor='w',pady=4)
-    root=Path(app.data_directory).parent/'Script';paths=sorted(root.rglob('*.bin.zst')) if root.is_dir() else []
+    root=Path(app.data_directory).parent/'Script';paths=script_paths(root)
     choices={p.relative_to(root).as_posix():p for p in paths};choice=ttk.Combobox(parent,values=list(choices),state='readonly');choice.pack(fill='x')
     ttk.Button(parent,text='Open script editor…',command=lambda:open_editor(app,choice.get())).pack(anchor='e',pady=4)
     output=readonly_text(parent,'No adjacent Script folder found.' if not paths else 'Select a compiled script.')

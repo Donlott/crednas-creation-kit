@@ -2,6 +2,8 @@
 
 Open **Tools → Script editor…**, or use the corresponding button in **Events**. Select a script from your own data. The editor decodes supported compiled-script functions, instructions and constants; it does not recover the original source code.
 
+Both entry points list compressed (`.bin.zst`) and uncompressed (`.bin`) scripts. When both versions of the same file are present, the compressed version is used.
+
 ## Supported edits
 
 - **String constants:** edit stored text with a live English/glossary preview. A constant can be shared by several instructions; its use list shows direct references within the selected script. Double-click a use to navigate to its instruction, or a string-referencing instruction to open its constant.
@@ -14,6 +16,8 @@ Other instructions remain read-only. Adding/removing instructions or functions, 
 ## Save and verify
 
 Apply the selected value or navigate with a valid pending value. Invalid input blocks the action. **Restore source value** resets the selection. Selected scripts join the normal project and export actions; their original compression and relative output paths are retained.
+
+When invalid input blocks navigation, the highlight stays on the value being edited, or clears if that value is hidden by a filter or belongs to another pane. Applying or restoring a string also refreshes its visible instruction references. Inverting a condition keeps its branch destination visible.
 
 The writer rebuilds serialized strings and reparses edited payloads before export, checking the intended string/instruction changes. Unsupported layouts are rejected. Structural checks do not establish in-game correctness or show which commands will execute in a scene.
 

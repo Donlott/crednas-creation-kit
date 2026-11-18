@@ -7,7 +7,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from branding import APP_NAME
 from script_bytecode import INVERSE, LITERALS, OPCODES, ScriptError, JUMPS
-from script_data import ScriptDocument
+from script_data import ScriptDocument, script_paths
 
 
 def open_editor(app,selected=''):
@@ -18,9 +18,7 @@ def open_editor(app,selected=''):
         if selected and selected in existing.paths and selected!=existing.source.get():existing.select_source(selected)
         existing.lift();return existing
     root=Path(app.data_directory).parent/'Script'
-    paths=sorted(set(root.rglob('*.bin.zst')) | set(root.rglob('*.bin'))) if root.is_dir() else []
-    # A compressed source is preferred when both representations are present.
-    paths=[p for p in paths if not (p.suffix=='.bin' and p.with_suffix('.bin.zst').is_file())]
+    paths=script_paths(root)
     if not paths:
         app.error('No scripts found. Keep the original Script folder beside GameData.');return
     editor=ScriptEditor(app,root,paths);app.script_window=editor
@@ -137,28 +135,47 @@ class ScriptEditor(tk.Toplevel):
         index=int(values[0])
         if index==self.fi:return
         if not self.commit():
-            if self.fi is not None and self.function_tree.exists(str(self.fi)):self.function_tree.selection_set(str(self.fi))
+            self.restore_selection(self.function_tree,self.fi)
             return
         self.fi=index;self.ii=self.ci=None;self.show_form(None);self.show_instructions()
 
     def show_instructions(self):
         self.code_tree.delete(*self.code_tree.get_children())
         if self.fi is None:return
-        for i,old in enumerate(self.doc.module.functions[self.fi].instructions):
-            opcode,args=self.doc.instruction(self.fi,i);ins=replace(old,opcode=opcode,arguments=args);detail=self.doc.module.describe(ins)
-            if ins.name in ('PGA','PshGPtr') and not args[0]&1:
-                ci=args[0]>>1;detail=f'string[{ci}]: '+self.doc.strings.get(ci,self.doc.module.constants[ci].text)
-            if ins.name in JUMPS:
-                delta=args[0]&0xffffffff;delta=delta-(1<<32) if delta&(1<<31) else delta
-                detail=f'branch → #{i+delta+(1 if delta>=0 else 0)} (target fixed)'
-            self.code_tree.insert('','end',iid=str(i),values=(str(i)+(' *' if (self.fi,i) in self.doc.instructions else ''),ins.name,', '.join(str(x) for x in args),detail))
+        for i in range(len(self.doc.module.functions[self.fi].instructions)):
+            self.code_tree.insert('','end',iid=str(i),values=self.instruction_values(self.fi,i))
+
+    def instruction_values(self,fi,ii):
+        old=self.doc.module.functions[fi].instructions[ii]
+        opcode,args=self.doc.instruction(fi,ii);ins=replace(old,opcode=opcode,arguments=args);detail=self.doc.module.describe(ins)
+        if ins.name in ('PGA','PshGPtr') and not args[0]&1:
+            ci=args[0]>>1;detail=f'string[{ci}]: '+self.doc.strings.get(ci,self.doc.module.constants[ci].text)
+        if ins.name in JUMPS:
+            delta=args[0]&0xffffffff;delta=delta-(1<<32) if delta&(1<<31) else delta
+            detail=f'branch → #{ii+delta+(1 if delta>=0 else 0)} (target fixed)'
+        return str(ii)+(' *' if (fi,ii) in self.doc.instructions else ''),ins.name,', '.join(str(x) for x in args),detail
+
+    def refresh_string_uses(self,ci):
+        if self.fi is None:return
+        for ii,ins in enumerate(self.doc.module.functions[self.fi].instructions):
+            if ins.name in ('PGA','PshGPtr') and ins.arguments[0]==ci*2 and self.code_tree.exists(str(ii)):
+                self.code_tree.item(str(ii),values=self.instruction_values(self.fi,ii))
+
+    @staticmethod
+    def restore_selection(tree,index):
+        if index is not None and tree.exists(str(index)):
+            tree.selection_set(str(index));tree.see(str(index))
+        else:
+            selected=tree.selection()
+            if selected:tree.selection_remove(*selected)
 
     def select_instruction(self,event=None):
         selected=self.code_tree.selection()
         if not selected:return
         ii=int(selected[0])
         if self.pending==('instruction',self.fi,ii):return
-        if not self.commit():return
+        if not self.commit():
+            self.restore_selection(self.code_tree,self.ii);return
         self.ii=ii;self.ci=None;self.show_form(('instruction',self.fi,ii))
 
     def select_constant(self,event=None):
@@ -166,7 +183,8 @@ class ScriptEditor(tk.Toplevel):
         if not selected:return
         ci=int(selected[0])
         if self.pending==('string',ci):return
-        if not self.commit():return
+        if not self.commit():
+            self.restore_selection(self.constant_tree,self.ci);return
         self.ci=ci;self.ii=None;self.show_form(('string',ci));self.uses_tree.delete(*self.uses_tree.get_children());self.uses=[]
         for fi,function in enumerate(self.doc.module.functions):
             for ii,ins in enumerate(function.instructions):
@@ -255,16 +273,17 @@ class ScriptEditor(tk.Toplevel):
             if self.pending[0]=='string':
                 ci=self.pending[1]
                 if self.constant_tree.exists(str(ci)):self.constant_tree.item(str(ci),values=(str(ci)+(' *' if ci in self.doc.strings else ''),self.value.get(),self.translation.get()))
+                self.refresh_string_uses(ci)
             elif self.code_tree.exists(str(self.pending[2])):
-                fi,ii=self.pending[1:];old=self.doc.module.functions[fi].instructions[ii];opcode,args=self.doc.instruction(fi,ii);ins=replace(old,opcode=opcode,arguments=args)
-                self.code_tree.item(str(ii),values=(str(ii)+(' *' if (fi,ii) in self.doc.instructions else ''),ins.name,', '.join(str(x) for x in args),self.doc.module.describe(ins)))
+                fi,ii=self.pending[1:];self.code_tree.item(str(ii),values=self.instruction_values(fi,ii))
             return True
         except Exception as exc:self.error(exc);return False
 
     def restore(self):
         if not self.pending:return
         pending=self.pending
-        if pending[0]=='string':self.doc.set_string(pending[1],self.doc.module.constants[pending[1]].text);self.filter_constants()
+        if pending[0]=='string':
+            self.doc.set_string(pending[1],self.doc.module.constants[pending[1]].text);self.filter_constants();self.refresh_string_uses(pending[1])
         else:
             _,fi,ii=pending;old=self.doc.module.functions[fi].instructions[ii];self.doc.set_instruction(fi,ii,old.opcode,old.arguments);self.show_instructions()
         self.show_form(pending);self.update_notice()
