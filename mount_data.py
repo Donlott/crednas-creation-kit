@@ -118,21 +118,21 @@ def source_tables(documents):
     return item,job,skills
 
 
-def load_sources(documents,sources,base):
+def load_sources(documents,sources,base,*,required=None,label='Buyable mounts'):
     """Load missing dependencies from the chosen data folder, transactionally.
 
     Keep existing document objects and edits. Read and validate all missing
     tables before adding any of them to the session.
     """
     from fw_editor import Item,Job,Skill,DataError
-    required=(('Items',Item),('Classes',Job),('Skills',Skill));missing=[]
+    required=required or (('Items',Item),('Classes',Job),('Skills',Skill));missing=[]
     for module,kind in required:
         existing=[d for d in documents.values() if d.filename==kind.filename]
         if existing:
             if len(existing)!=1 or not isinstance(existing[0],kind):raise DataError('The loaded '+kind.filename+' has an unsupported or duplicate table layout. Reopen your original game data folder.')
         else:missing.append((module,kind))
     if not missing:return 0
-    if not base:raise DataError('Use Open data… to choose your extracted game folder first. Buyable mounts will find its required tables automatically.')
+    if not base:raise DataError('Use Open data… to choose your extracted game folder first. '+label+' will find its required tables automatically.')
     base=Path(base).resolve()
     if base.is_file():base=base.parent
     candidates=(base,base/'GameData',base/'romfs/GameData')
@@ -159,7 +159,7 @@ def catalog_for(documents,patch):
     return catalog(Binary(job.build()),skills,patch.catalog_names())
 
 
-def build_outputs(documents):
+def build_mount_outputs(documents):
     from fw_editor import Item,DataError
     from message_append import append_messages
     patch=next((d for d in documents.values() if isinstance(d,MountPatch)),None)
@@ -192,3 +192,9 @@ def build_outputs(documents):
         if offer.unique:description+=' One owned at a time.'
         additions.extend([(offer.name_key,offer.label,'MIID_Materials'),(offer.help_key,description,'MIID_H_Materials')])
     return {'romfs/GameData/Item.bin':exported,BANK_OUTPUT:append_messages(bank,additions),IPS_PATH:catalog_ips32(native)}
+
+
+def build_outputs(documents):
+    # Keep the existing public entry point and combine shared generated files.
+    from battalion_data import build_outputs as compose
+    return compose(documents)

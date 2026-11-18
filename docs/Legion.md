@@ -10,4 +10,6 @@ Legion and learning identifiers can use the same textual prefix. They are separa
 
 Editing a Legion does not create new gambit animations, sounds or assets. The module edits existing supported definitions and does not simulate combat effects or engine limits.
 
+To add direct purchases without rewriting these definitions, use [Buyable battalions](Buyable-battalions.md) in the Tools menu.
+
 [Guide home](Home.md)

@@ -26,6 +26,7 @@ def self_test(report):
     import event_ui, event_data, script_inspector, script_ui, script_data, script_bytecode, script_opcodes
     import tutorial_ui, tutorial_data, tutorial_catalog
     import mount_ui, mount_data, mount_native, mount_skills, mount_catalog, message_append
+    import battalion_ui, battalion_data, battalion_native
     import asset_index, appearance_data, item_index, skill_index, reliance_data, localization
     frame = bytes.fromhex('28b52ffd202a510100437265646e612773204372656174696f6e204b69743a20456e676c697368202f20e697a5e69cace8aa9e')
     assert fw.decompress(frame) == (APP_NAME+': English / 日本語').encode('utf8')

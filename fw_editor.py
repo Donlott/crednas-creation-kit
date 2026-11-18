@@ -1012,6 +1012,7 @@ def load_suite_project(documents, project):
 def export_suite(documents, sources, directory):
     from tutorial_data import validate_export
     from mount_data import MountPatch, GENERATED_PATHS, build_outputs, digest
+    from battalion_data import BattalionPatch
     validate_export(documents)
     validate_new_item_ids(documents)
     directory = Path(directory)
@@ -1033,7 +1034,7 @@ def export_suite(documents, sources, directory):
     overlay=build_outputs(documents)
     planned=[];generated_new={}
     protected=[Path(source).resolve() for source in sources.values()]
-    protected.extend(d.message_path.resolve() for d in documents.values() if isinstance(d,MountPatch))
+    protected.extend(d.message_path.resolve() for d in documents.values() if isinstance(d,(MountPatch,BattalionPatch)))
     # Reject edits to previously generated files before writing any outputs. A
     # disabled patch only removes files whose exact previous bytes we still own.
     for name,sha in generated_owned.items():
@@ -1042,7 +1043,7 @@ def export_suite(documents, sources, directory):
         if target.exists() and digest(target.read_bytes())!=sha:raise DataError('A generated patch file was edited outside CCK. Choose a separate mod folder: '+name)
     for module,doc in documents.items():
         from script_data import ScriptDocument, valid_source as valid_script_source
-        if isinstance(doc,MountPatch):continue
+        if isinstance(doc,(MountPatch,BattalionPatch)):continue
         if isinstance(doc,ScriptDocument):
             if not valid_script_source(doc.filename):raise DataError('Invalid script output path.')
             target=directory/'romfs'/doc.filename
@@ -1311,6 +1312,7 @@ def main():
             tools_menu.add_command(label='Script editor…', command=lambda:__import__('script_ui').open_editor(self))
             tools_menu.add_command(label='Forced tutorials…', command=lambda:__import__('tutorial_ui').open_editor(self))
             tools_menu.add_command(label='Buyable mounts…', command=lambda:__import__('mount_ui').open_editor(self))
+            tools_menu.add_command(label='Buyable battalions…', command=lambda:__import__('battalion_ui').open_editor(self))
             menu.add_cascade(label='Tools', menu=tools_menu)
             self.configure(menu=menu)
             top = ttk.Frame(self, padding=(8, 6)); top.pack(fill='x')

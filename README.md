@@ -17,6 +17,7 @@ A Windows and Linux file editor for **Fortune's Weave**, supporting game version
 - Edit event conditions and timelines, plus supported compiled-script constants and instructions.
 - Browse forced tutorial sequences, inspect progression dependencies and test supported guidance bypasses.
 - Export an experimental patch for direct mount/skill-variant purchases, with per-variant prices, availability and chapter limits (verified game build required).
+- Add experimental direct battalion purchases, with editable prices, availability and chapter limits, compatible with Buyable mounts.
 - View English/glossary previews beside stored values and follow supported reference links.
 - Save projects, reopen your last project and export edits to a separate mod folder.
 
